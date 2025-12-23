@@ -38,12 +38,18 @@
   "icons": {
     "48": "icon.png"
   },
+  "content_security_policy": {
+    "script-src": [
+      "'self'"
+    ]
+  },
   "web_accessible_resources": [
     {
       "resources": [
         "view.html",
         "view.css",
-        "view.js"
+        "view.js",
+        "Sortable.min.js"
       ],
       "matches": [
         "<all_urls>"

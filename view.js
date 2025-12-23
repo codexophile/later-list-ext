@@ -461,8 +461,6 @@ function renderActiveTab(container) {
     onClick: () => addContainer(tab.id),
   });
   container.appendChild(addContainerBtn);
-
-  initSortable();
 }
 
 function exportToJSON() {
@@ -627,6 +625,9 @@ function render() {
   const activeArea = createEl('div');
   renderActiveTab(activeArea);
   app.appendChild(activeArea);
+
+  // Now that the active area is attached to the document, initialize Sortable.
+  initSortable(activeArea);
 }
 
 async function init() {
@@ -636,11 +637,18 @@ async function init() {
 
 document.addEventListener('DOMContentLoaded', init);
 
-function initSortable() {
+function initSortable(rootEl) {
   if (!window.Sortable) return;
+  if (!rootEl) return;
+
   // Links
-  document.querySelectorAll('.container-content').forEach(listEl => {
-    new Sortable(listEl, {
+  rootEl.querySelectorAll('.container-content').forEach(listEl => {
+    if (listEl._laterlistSortable) {
+      listEl._laterlistSortable.destroy();
+      listEl._laterlistSortable = null;
+    }
+
+    listEl._laterlistSortable = new Sortable(listEl, {
       group: 'links',
       animation: 150,
       onEnd: evt => {
@@ -664,8 +672,13 @@ function initSortable() {
   });
 
   // Containers
-  document.querySelectorAll('.containers').forEach(listEl => {
-    new Sortable(listEl, {
+  rootEl.querySelectorAll('.containers').forEach(listEl => {
+    if (listEl._laterlistSortable) {
+      listEl._laterlistSortable.destroy();
+      listEl._laterlistSortable = null;
+    }
+
+    listEl._laterlistSortable = new Sortable(listEl, {
       group: 'containers',
       animation: 150,
       handle: '.container-header',

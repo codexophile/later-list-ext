@@ -82,6 +82,34 @@ function addLink(tabId, containerId) {
   render();
 }
 
+function renameTab(tabId, newName) {
+  const tab = state.data.tabs.find(t => t.id === tabId);
+  if (!tab || !newName.trim()) return;
+  tab.name = newName.trim();
+  persist();
+  render();
+}
+
+function renameContainer(tabId, containerId, newName) {
+  const tab = state.data.tabs.find(t => t.id === tabId);
+  const container = tab?.containers.find(c => c.id === containerId);
+  if (!container || !newName.trim()) return;
+  container.name = newName.trim();
+  persist();
+  render();
+}
+
+function editLink(tabId, containerId, linkId, title, url) {
+  const tab = state.data.tabs.find(t => t.id === tabId);
+  const container = tab?.containers.find(c => c.id === containerId);
+  const link = container?.links.find(l => l.id === linkId);
+  if (!link) return;
+  if (title) link.title = title.trim();
+  if (url) link.url = url.trim();
+  persist();
+  render();
+}
+
 function setActiveTab(tabId) {
   state.activeTabId = tabId;
   render();
@@ -95,7 +123,32 @@ function createEl(tag, opts = {}) {
   if (opts.attrs)
     Object.entries(opts.attrs).forEach(([k, v]) => el.setAttribute(k, v));
   if (opts.onClick) el.addEventListener('click', opts.onClick);
+  if (opts.style) el.style.cssText = opts.style;
   return el;
+}
+
+function makeEditable(el, onSave) {
+  el.contentEditable = true;
+  el.classList.add('editable');
+  el.addEventListener('blur', () => {
+    el.contentEditable = false;
+    el.classList.remove('editable');
+    const newVal = el.textContent.trim();
+    if (newVal) onSave(newVal);
+    render();
+  }, { once: true });
+  el.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      el.blur();
+    } else if (e.key === 'Escape') {
+      el.contentEditable = false;
+      el.classList.remove('editable');
+      render();
+    }
+  }, { once: true });
+  el.focus();
+  document.execCommand('selectAll', false, null);
 }
 
 function renderTabs(container) {
@@ -106,7 +159,15 @@ function renderTabs(container) {
     const tabEl = createEl('div', {
       className: `tab${tab.id === state.activeTabId ? ' active' : ''}`,
       textContent: tab.name,
-      onClick: () => setActiveTab(tab.id),
+      onClick: e => {
+        if (e.shiftKey) {
+          e.stopPropagation();
+          makeEditable(tabEl, newName => renameTab(tab.id, newName));
+        } else {
+          setActiveTab(tab.id);
+        }
+      },
+      title: 'Shift+click to rename',
     });
     const count = tab.containers.reduce((acc, c) => acc + c.links.length, 0);
     const countEl = createEl('span', {
@@ -236,7 +297,17 @@ function renderActiveTab(container) {
   tab.containers.forEach(containerData => {
     const containerEl = createEl('div', { className: 'container' });
     const header = createEl('div', { className: 'container-header' });
-    const nameEl = createEl('div', { textContent: containerData.name });
+    const nameEl = createEl('div', {
+      textContent: containerData.name,
+      onClick: e => {
+        if (e.shiftKey) {
+          e.stopPropagation();
+          makeEditable(nameEl, newName => renameContainer(tab.id, containerData.id, newName));
+        }
+      },
+      title: 'Shift+click to rename',
+      style: 'cursor: default; flex: 1;',
+    });
     const stats = createEl('div', {
       className: 'link-count',
       textContent: `${containerData.links.length} links`,
@@ -277,6 +348,15 @@ function renderActiveTab(container) {
       anchor.addEventListener('click', e => {
         e.preventDefault();
         handleOpenLink(link.url, true);
+      });
+      anchor.addEventListener('dblclick', e => {
+        e.preventDefault();
+        e.stopPropagation();
+        const newTitle = prompt('Edit title', link.title) || link.title;
+        const newUrl = prompt('Edit URL', link.url) || link.url;
+        if (newTitle || newUrl) {
+          editLink(tab.id, containerData.id, link.id, newTitle, newUrl);
+        }
       });
       const actions = createEl('div', { className: 'container-actions' });
       const deleteBtn = createEl('button', {

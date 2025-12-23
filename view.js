@@ -5,6 +5,7 @@
 let state = {
   data: null,
   activeTabId: null,
+  duplicateUrls: new Set(),
 };
 
 const id = prefix =>
@@ -26,6 +27,37 @@ async function persist() {
     type: 'laterlist:setData',
     payload: state.data,
   });
+}
+
+function normalizeUrl(url) {
+  try {
+    const u = new URL(url);
+    return u.origin + u.pathname.replace(/\/$/, '') + u.search;
+  } catch {
+    return url.toLowerCase().trim();
+  }
+}
+
+function findAllDuplicates() {
+  const urlCounts = new Map();
+  const allLinks = [];
+
+  state.data.tabs.forEach(tab => {
+    tab.containers.forEach(container => {
+      container.links.forEach(link => {
+        const normalized = normalizeUrl(link.url);
+        urlCounts.set(normalized, (urlCounts.get(normalized) || 0) + 1);
+        allLinks.push({ link, normalized });
+      });
+    });
+  });
+
+  const duplicates = new Set();
+  urlCounts.forEach((count, url) => {
+    if (count > 1) duplicates.add(url);
+  });
+
+  return duplicates;
 }
 
 function addTab() {
@@ -382,7 +414,10 @@ function renderActiveTab(container) {
       attrs: { 'data-tab-id': tab.id, 'data-container-id': containerData.id },
     });
     containerData.links.forEach(link => {
-      const linkRow = createEl('div', { className: 'link' });
+      const isDuplicate = state.duplicateUrls.has(normalizeUrl(link.url));
+      const linkRow = createEl('div', {
+        className: isDuplicate ? 'link duplicate-link' : 'link',
+      });
       const anchor = createEl('a', {
         textContent: link.title,
         attrs: { href: link.url, target: '_blank' },
@@ -525,6 +560,9 @@ function importFromOneTab(file) {
 }
 
 function render() {
+  // Calculate duplicates before rendering
+  state.duplicateUrls = findAllDuplicates();
+
   const app = document.getElementById('app');
   app.innerHTML = '';
 

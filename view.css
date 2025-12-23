@@ -301,8 +301,20 @@ body {
 }
 
 .duplicate-link {
-  background-color: #ffcccc; /* Light red background for duplicate links */
-  border: 1px solid #ff6666; /* Red border for duplicate links */
+  border-left: 3px solid #f59e0b !important;
+  background: rgba(245, 158, 11, 0.1) !important;
+}
+
+.duplicate-link::before {
+  content: '⚠';
+  position: absolute;
+  left: 8px;
+  opacity: 0.6;
+  color: #f59e0b;
+}
+
+.duplicate-link a {
+  margin-left: 16px;
 }
 
 .link {

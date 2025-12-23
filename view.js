@@ -11,6 +11,170 @@ let state = {
 const id = prefix =>
   `${prefix}-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
 
+function ensureArray(value) {
+  return Array.isArray(value) ? value : [];
+}
+
+function ensureString(value, fallback = '') {
+  if (typeof value !== 'string') return fallback;
+  const trimmed = value.trim();
+  return trimmed || fallback;
+}
+
+function allocateUniqueId(existing, prefix, used) {
+  const candidate = ensureString(existing, '');
+  if (candidate && !used.has(candidate)) {
+    used.add(candidate);
+    return candidate;
+  }
+
+  let next;
+  do {
+    next = id(prefix);
+  } while (used.has(next));
+  used.add(next);
+  return next;
+}
+
+// Repairs imported/legacy data by ensuring all ids exist and are unique.
+// Returns true if any changes were made.
+function migrateAndFixData(data) {
+  if (!data || typeof data !== 'object') return false;
+
+  let changed = false;
+  if (!Array.isArray(data.tabs)) {
+    data.tabs = [];
+    changed = true;
+  }
+  if (!Array.isArray(data.trash)) {
+    data.trash = [];
+    changed = true;
+  }
+
+  const usedTabIds = new Set();
+  const usedContainerIds = new Set();
+  const usedLinkIds = new Set();
+
+  data.tabs = ensureArray(data.tabs);
+  data.trash = ensureArray(data.trash);
+
+  data.tabs.forEach((tab, tabIndex) => {
+    if (!tab || typeof tab !== 'object') {
+      data.tabs[tabIndex] = { id: id('tab'), name: 'Tab', containers: [] };
+      changed = true;
+      tab = data.tabs[tabIndex];
+    }
+
+    const nextTabId = allocateUniqueId(tab.id, 'tab', usedTabIds);
+    if (tab.id !== nextTabId) {
+      tab.id = nextTabId;
+      changed = true;
+    }
+
+    const nextTabName = ensureString(tab.name, 'Tab');
+    if (tab.name !== nextTabName) {
+      tab.name = nextTabName;
+      changed = true;
+    }
+
+    if (!Array.isArray(tab.containers)) {
+      tab.containers = [];
+      changed = true;
+    }
+    tab.containers = ensureArray(tab.containers);
+
+    tab.containers.forEach((container, containerIndex) => {
+      if (!container || typeof container !== 'object') {
+        tab.containers[containerIndex] = {
+          id: id('container'),
+          name: 'Container',
+          links: [],
+        };
+        changed = true;
+        container = tab.containers[containerIndex];
+      }
+
+      const nextContainerId = allocateUniqueId(
+        container.id,
+        'container',
+        usedContainerIds
+      );
+      if (container.id !== nextContainerId) {
+        container.id = nextContainerId;
+        changed = true;
+      }
+
+      const nextContainerName = ensureString(container.name, 'Container');
+      if (container.name !== nextContainerName) {
+        container.name = nextContainerName;
+        changed = true;
+      }
+
+      if (!Array.isArray(container.links)) {
+        container.links = [];
+        changed = true;
+      }
+      container.links = ensureArray(container.links);
+
+      container.links.forEach((link, linkIndex) => {
+        if (!link || typeof link !== 'object') {
+          container.links[linkIndex] = {
+            id: id('link'),
+            title: 'Link',
+            url: '',
+          };
+          changed = true;
+          link = container.links[linkIndex];
+        }
+
+        const nextLinkId = allocateUniqueId(link.id, 'link', usedLinkIds);
+        if (link.id !== nextLinkId) {
+          link.id = nextLinkId;
+          changed = true;
+        }
+
+        const nextTitle = ensureString(link.title, link.url || 'Link');
+        if (link.title !== nextTitle) {
+          link.title = nextTitle;
+          changed = true;
+        }
+        const nextUrl = ensureString(link.url, '');
+        if (link.url !== nextUrl) {
+          link.url = nextUrl;
+          changed = true;
+        }
+      });
+    });
+  });
+
+  // Trash links
+  data.trash.forEach((link, linkIndex) => {
+    if (!link || typeof link !== 'object') {
+      data.trash[linkIndex] = { id: id('link'), title: 'Link', url: '' };
+      changed = true;
+      link = data.trash[linkIndex];
+    }
+
+    const nextLinkId = allocateUniqueId(link.id, 'link', usedLinkIds);
+    if (link.id !== nextLinkId) {
+      link.id = nextLinkId;
+      changed = true;
+    }
+    const nextTitle = ensureString(link.title, link.url || 'Link');
+    if (link.title !== nextTitle) {
+      link.title = nextTitle;
+      changed = true;
+    }
+    const nextUrl = ensureString(link.url, '');
+    if (link.url !== nextUrl) {
+      link.url = nextUrl;
+      changed = true;
+    }
+  });
+
+  return changed;
+}
+
 async function loadData() {
   const response = await chrome.runtime.sendMessage({
     type: 'laterlist:getData',
@@ -19,7 +183,20 @@ async function loadData() {
   if (!state.data.tabs?.length) {
     state.data.tabs = [];
   }
+
+  const changed = migrateAndFixData(state.data);
+  if (changed) {
+    await persist();
+  }
+
   state.activeTabId = state.activeTabId || state.data.tabs[0]?.id || 'trash';
+  // If active tab no longer exists (e.g., ids were repaired), fall back safely.
+  if (
+    state.activeTabId !== 'trash' &&
+    !state.data.tabs.some(t => t.id === state.activeTabId)
+  ) {
+    state.activeTabId = state.data.tabs[0]?.id || 'trash';
+  }
 }
 
 async function persist() {
@@ -494,6 +671,12 @@ function importFromJSON(file) {
         state.data.trash = state.data.trash || [];
         if (imported.trash) state.data.trash.push(...imported.trash);
       }
+
+      // Imported backups (especially from older userscripts) may be missing ids
+      // or contain duplicate ids. Repair them to prevent tab collisions.
+      migrateAndFixData(state.data);
+      state.activeTabId = state.data.tabs[0]?.id || 'trash';
+
       persist();
       render();
     } catch (err) {
@@ -546,6 +729,8 @@ function importFromOneTab(file) {
         container.id = id('container');
         firstTab.containers.push(container);
       }
+
+      migrateAndFixData(state.data);
 
       persist();
       render();

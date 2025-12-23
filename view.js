@@ -130,23 +130,31 @@ function createEl(tag, opts = {}) {
 function makeEditable(el, onSave) {
   el.contentEditable = true;
   el.classList.add('editable');
-  el.addEventListener('blur', () => {
-    el.contentEditable = false;
-    el.classList.remove('editable');
-    const newVal = el.textContent.trim();
-    if (newVal) onSave(newVal);
-    render();
-  }, { once: true });
-  el.addEventListener('keydown', e => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      el.blur();
-    } else if (e.key === 'Escape') {
+  el.addEventListener(
+    'blur',
+    () => {
       el.contentEditable = false;
       el.classList.remove('editable');
+      const newVal = el.textContent.trim();
+      if (newVal) onSave(newVal);
       render();
-    }
-  }, { once: true });
+    },
+    { once: true }
+  );
+  el.addEventListener(
+    'keydown',
+    e => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        el.blur();
+      } else if (e.key === 'Escape') {
+        el.contentEditable = false;
+        el.classList.remove('editable');
+        render();
+      }
+    },
+    { once: true }
+  );
   el.focus();
   document.execCommand('selectAll', false, null);
 }
@@ -302,7 +310,9 @@ function renderActiveTab(container) {
       onClick: e => {
         if (e.shiftKey) {
           e.stopPropagation();
-          makeEditable(nameEl, newName => renameContainer(tab.id, containerData.id, newName));
+          makeEditable(nameEl, newName =>
+            renameContainer(tab.id, containerData.id, newName)
+          );
         }
       },
       title: 'Shift+click to rename',

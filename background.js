@@ -40,7 +40,7 @@ async function saveData(data) {
   await chrome.storage.local.set({ readLaterData: data });
 }
 
-function ensureFirstContainer(data) {
+function ensureTab(data, tabId) {
   if (!data.tabs.length) {
     data.tabs.push({
       id: `tab-${Date.now()}`,
@@ -48,24 +48,36 @@ function ensureFirstContainer(data) {
       containers: [],
     });
   }
-  const firstTab = data.tabs[0];
-  if (!firstTab.containers.length) {
-    firstTab.containers.push({
+
+  if (tabId) {
+    const tab = data.tabs.find(t => t.id === tabId);
+    if (tab) return tab;
+  }
+
+  return data.tabs[0];
+}
+
+function ensureContainerInTab(tab) {
+  if (!tab.containers.length) {
+    tab.containers.push({
       id: `container-${Date.now()}`,
       name: 'Links',
       links: [],
     });
   }
-  return firstTab.containers[0];
+  return tab.containers[0];
 }
 
 async function addLink({ url, title, tabId, containerId }) {
   const data = await getData();
-  const targetTab = tabId ? data.tabs.find(t => t.id === tabId) : data.tabs[0];
-  const tab = targetTab || data.tabs[0];
-  let container = tab.containers.find(c => c.id === containerId);
+  const tab = ensureTab(data, tabId);
+
+  let container = null;
+  if (containerId) {
+    container = tab.containers.find(c => c.id === containerId) || null;
+  }
   if (!container) {
-    container = ensureFirstContainer(data);
+    container = ensureContainerInTab(tab);
   }
 
   const newLink = {

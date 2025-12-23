@@ -7,12 +7,22 @@
 </head>
 
 <body>
-  <h1>LaterList</h1>
-  <div class="actions">
-    <button id="save-current">Save Current Tab</button>
-    <button id="open-view">Open Full View</button>
+  <div class="laterlist-popup laterlist-popup--panel" id="laterlist-panel">
+    <div class="laterlist-popup__title" id="page-title">Loading…</div>
+    <div class="laterlist-popup__url" id="page-url"></div>
+
+    <div class="laterlist-popup__select-wrapper">
+      <select id="tab-select" class="laterlist-popup__select" aria-label="Select tab"></select>
+      <select id="container-select" class="laterlist-popup__select" aria-label="Select container"></select>
+    </div>
+
+    <div class="laterlist-popup__button-container">
+      <button class="laterlist-popup__button" id="open-view">Open Full View</button>
+      <button class="laterlist-popup__button laterlist-popup__button--primary" id="save-current">Save</button>
+    </div>
+
+    <div class="laterlist-popup__status" id="status" aria-live="polite"></div>
   </div>
-  <div id="status"></div>
   <script src="popup.js"></script>
 </body>
 

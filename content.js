@@ -118,14 +118,20 @@
     const url = targetAnchor?.href || window.location.href;
     const title = (targetAnchor?.textContent || document.title || url).trim();
 
-    const { data } = await chrome.runtime.sendMessage({ type: 'laterlist:getData' });
+    const { data } = await chrome.runtime.sendMessage({
+      type: 'laterlist:getData',
+    });
     const tabs = data?.tabs || [];
     if (!tabs.length) return;
 
     const tabOptions = tabs.map(tab => ({ id: tab.id, label: tab.name }));
     const defaultTabId = tabOptions[0].id;
-    const firstTabContainers = tabs.find(t => t.id === defaultTabId)?.containers || [];
-    const containerOptions = firstTabContainers.map(c => ({ id: c.id, label: c.name }));
+    const firstTabContainers =
+      tabs.find(t => t.id === defaultTabId)?.containers || [];
+    const containerOptions = firstTabContainers.map(c => ({
+      id: c.id,
+      label: c.name,
+    }));
     const defaultContainerId = containerOptions[0]?.id;
 
     popupEl = document.createElement('div');
@@ -168,7 +174,8 @@
     cancelBtn.addEventListener('click', removePopup);
 
     const saveBtn = document.createElement('button');
-    saveBtn.className = 'laterlist-popup__button laterlist-popup__button--primary';
+    saveBtn.className =
+      'laterlist-popup__button laterlist-popup__button--primary';
     saveBtn.textContent = 'Save';
     saveBtn.addEventListener('click', async () => {
       await chrome.runtime.sendMessage({
@@ -177,8 +184,8 @@
           url,
           title,
           tabId: tabSelect.value,
-          containerId: containerSelect.value
-        }
+          containerId: containerSelect.value,
+        },
       });
       removePopup();
     });

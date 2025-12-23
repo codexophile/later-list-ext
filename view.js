@@ -4,11 +4,13 @@
 
 let state = {
   data: null,
-  activeTabId: null
+  activeTabId: null,
 };
 
 async function loadData() {
-  const response = await chrome.runtime.sendMessage({ type: 'laterlist:getData' });
+  const response = await chrome.runtime.sendMessage({
+    type: 'laterlist:getData',
+  });
   state.data = response?.data;
   if (!state.data.tabs?.length) {
     state.data.tabs = [];
@@ -17,7 +19,10 @@ async function loadData() {
 }
 
 async function persist() {
-  await chrome.runtime.sendMessage({ type: 'laterlist:setData', payload: state.data });
+  await chrome.runtime.sendMessage({
+    type: 'laterlist:setData',
+    payload: state.data,
+  });
 }
 
 function setActiveTab(tabId) {
@@ -30,7 +35,8 @@ function createEl(tag, opts = {}) {
   if (opts.className) el.className = opts.className;
   if (opts.textContent) el.textContent = opts.textContent;
   if (opts.html) el.innerHTML = opts.html;
-  if (opts.attrs) Object.entries(opts.attrs).forEach(([k, v]) => el.setAttribute(k, v));
+  if (opts.attrs)
+    Object.entries(opts.attrs).forEach(([k, v]) => el.setAttribute(k, v));
   if (opts.onClick) el.addEventListener('click', opts.onClick);
   return el;
 }
@@ -43,10 +49,13 @@ function renderTabs(container) {
     const tabEl = createEl('div', {
       className: `tab${tab.id === state.activeTabId ? ' active' : ''}`,
       textContent: tab.name,
-      onClick: () => setActiveTab(tab.id)
+      onClick: () => setActiveTab(tab.id),
     });
     const count = tab.containers.reduce((acc, c) => acc + c.links.length, 0);
-    const countEl = createEl('span', { className: 'tab-count', textContent: count });
+    const countEl = createEl('span', {
+      className: 'tab-count',
+      textContent: count,
+    });
     tabEl.appendChild(countEl);
     tabsWrapper.appendChild(tabEl);
   });
@@ -55,11 +64,11 @@ function renderTabs(container) {
   const trashEl = createEl('div', {
     className: `tab trash-tab${state.activeTabId === 'trash' ? ' active' : ''}`,
     textContent: 'Trash',
-    onClick: () => setActiveTab('trash')
+    onClick: () => setActiveTab('trash'),
   });
   const trashCount = createEl('span', {
     className: 'tab-count',
-    textContent: state.data.trash?.length ?? 0
+    textContent: state.data.trash?.length ?? 0,
   });
   trashEl.appendChild(trashCount);
   tabsWrapper.appendChild(trashEl);
@@ -92,7 +101,11 @@ function restoreLink(linkId) {
   const [link] = state.data.trash.splice(idx, 1);
   const firstTab = state.data.tabs[0];
   if (!firstTab.containers.length) {
-    firstTab.containers.push({ id: `container-${Date.now()}`, name: 'Restored', links: [] });
+    firstTab.containers.push({
+      id: `container-${Date.now()}`,
+      name: 'Restored',
+      links: [],
+    });
   }
   firstTab.containers[0].links.push(link);
   persist();
@@ -109,12 +122,15 @@ function renderActiveTab(container) {
     } else {
       state.data.trash.forEach(link => {
         const linkRow = createEl('div', { className: 'trash-link' });
-        const anchor = createEl('a', { textContent: link.title, attrs: { href: link.url, target: '_blank' } });
+        const anchor = createEl('a', {
+          textContent: link.title,
+          attrs: { href: link.url, target: '_blank' },
+        });
         const actions = createEl('div', { className: 'trash-actions' });
         const restoreBtn = createEl('button', {
           className: 'btn btn-restore',
           textContent: 'Restore',
-          onClick: () => restoreLink(link.id)
+          onClick: () => restoreLink(link.id),
         });
         const deleteBtn = createEl('button', {
           className: 'btn btn-delete',
@@ -123,7 +139,7 @@ function renderActiveTab(container) {
             state.data.trash = state.data.trash.filter(l => l.id !== link.id);
             persist();
             render();
-          }
+          },
         });
         actions.appendChild(restoreBtn);
         actions.appendChild(deleteBtn);
@@ -146,7 +162,7 @@ function renderActiveTab(container) {
     const nameEl = createEl('div', { textContent: containerData.name });
     const stats = createEl('div', {
       className: 'link-count',
-      textContent: `${containerData.links.length} links`
+      textContent: `${containerData.links.length} links`,
     });
     header.appendChild(nameEl);
     header.appendChild(stats);
@@ -156,7 +172,7 @@ function renderActiveTab(container) {
       const linkRow = createEl('div', { className: 'link' });
       const anchor = createEl('a', {
         textContent: link.title,
-        attrs: { href: link.url, target: '_blank' }
+        attrs: { href: link.url, target: '_blank' },
       });
       anchor.addEventListener('click', e => {
         e.preventDefault();
@@ -166,7 +182,7 @@ function renderActiveTab(container) {
       const deleteBtn = createEl('button', {
         className: 'btn btn-delete',
         textContent: 'Trash',
-        onClick: () => deleteLink(tab.id, containerData.id, link.id)
+        onClick: () => deleteLink(tab.id, containerData.id, link.id),
       });
       actions.appendChild(deleteBtn);
       linkRow.appendChild(anchor);

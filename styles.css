@@ -1,28 +1,28 @@
 /* Styles for LaterList extension */
 body {
-    font-family: Arial, sans-serif;
-    background-color: #f4f4f4;
-    color: #333;
+  font-family: Arial, sans-serif;
+  background-color: #f4f4f4;
+  color: #333;
 }
 
 #tabs-container {
-    margin: 20px;
+  margin: 20px;
 }
 
 .actions {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 12px;
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
 }
 
 button {
-    padding: 8px 12px;
-    border: 1px solid #333;
-    border-radius: 4px;
-    background: #fff;
-    cursor: pointer;
+  padding: 8px 12px;
+  border: 1px solid #333;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
 }
 
 button:hover {
-    background: #e6e6e6;
+  background: #e6e6e6;
 }

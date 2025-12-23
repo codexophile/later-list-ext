@@ -1,0 +1,45 @@
+{
+  "manifest_version": 3,
+  "name": "LaterList",
+  "version": "0.1.0",
+  "description": "Save and organize tabs into tabs/containers with trash and import/export.",
+  "permissions": [
+    "storage",
+    "tabs",
+    "contextMenus",
+    "activeTab",
+    "scripting"
+  ],
+  "host_permissions": ["<all_urls>"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": "icon.png"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "options_ui": {
+    "page": "view.html",
+    "open_in_tab": true
+  },
+  "icons": {
+    "48": "icon.png"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "view.html",
+        "view.css",
+        "view.js"
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

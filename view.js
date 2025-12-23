@@ -7,6 +7,9 @@ let state = {
   activeTabId: null,
 };
 
+const id = prefix =>
+  `${prefix}-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+
 async function loadData() {
   const response = await chrome.runtime.sendMessage({
     type: 'laterlist:getData',
@@ -23,6 +26,60 @@ async function persist() {
     type: 'laterlist:setData',
     payload: state.data,
   });
+}
+
+function addTab() {
+  const name = prompt('Tab name');
+  if (!name) return;
+  state.data.tabs.push({ id: id('tab'), name, containers: [] });
+  state.activeTabId = state.data.tabs.at(-1).id;
+  persist();
+  render();
+}
+
+function deleteTab(tabId) {
+  const tab = state.data.tabs.find(t => t.id === tabId);
+  if (!tab) return;
+  if (!confirm('Delete tab and send its links to trash?')) return;
+  tab.containers.forEach(c => state.data.trash.push(...c.links));
+  state.data.tabs = state.data.tabs.filter(t => t.id !== tabId);
+  state.activeTabId = state.data.tabs[0]?.id || 'trash';
+  persist();
+  render();
+}
+
+function addContainer(tabId) {
+  const tab = state.data.tabs.find(t => t.id === tabId);
+  if (!tab) return;
+  const name = prompt('Container name');
+  if (!name) return;
+  tab.containers.push({ id: id('container'), name, links: [] });
+  persist();
+  render();
+}
+
+function deleteContainer(tabId, containerId) {
+  const tab = state.data.tabs.find(t => t.id === tabId);
+  if (!tab) return;
+  const container = tab.containers.find(c => c.id === containerId);
+  if (!container) return;
+  if (!confirm('Delete container and send its links to trash?')) return;
+  state.data.trash.push(...container.links);
+  tab.containers = tab.containers.filter(c => c.id !== containerId);
+  persist();
+  render();
+}
+
+function addLink(tabId, containerId) {
+  const url = prompt('Link URL');
+  if (!url) return;
+  const title = prompt('Link title (optional)', url) || url;
+  const tab = state.data.tabs.find(t => t.id === tabId);
+  const container = tab?.containers.find(c => c.id === containerId);
+  if (!container) return;
+  container.links.push({ id: id('link'), title, url });
+  persist();
+  render();
 }
 
 function setActiveTab(tabId) {
@@ -56,7 +113,16 @@ function renderTabs(container) {
       className: 'tab-count',
       textContent: count,
     });
+    const removeBtn = createEl('button', {
+      className: 'btn btn-delete',
+      textContent: '×',
+      onClick: e => {
+        e.stopPropagation();
+        deleteTab(tab.id);
+      },
+    });
     tabEl.appendChild(countEl);
+    if (state.data.tabs.length > 1) tabEl.appendChild(removeBtn);
     tabsWrapper.appendChild(tabEl);
   });
 
@@ -72,6 +138,16 @@ function renderTabs(container) {
   });
   trashEl.appendChild(trashCount);
   tabsWrapper.appendChild(trashEl);
+
+  const addTabBtn = createEl('button', {
+    className: 'btn btn-primary',
+    textContent: '+ Tab',
+    onClick: e => {
+      e.stopPropagation();
+      addTab();
+    },
+  });
+  tabsWrapper.appendChild(addTabBtn);
 
   container.appendChild(tabsWrapper);
 }
@@ -156,6 +232,7 @@ function renderActiveTab(container) {
   if (!tab) return;
 
   const containersGrid = createEl('div', { className: 'containers' });
+  containersGrid.dataset.tabId = tab.id;
   tab.containers.forEach(containerData => {
     const containerEl = createEl('div', { className: 'container' });
     const header = createEl('div', { className: 'container-header' });
@@ -164,10 +241,33 @@ function renderActiveTab(container) {
       className: 'link-count',
       textContent: `${containerData.links.length} links`,
     });
+    const headerActions = createEl('div', { className: 'container-actions' });
+    const addLinkBtn = createEl('button', {
+      className: 'btn btn-primary',
+      textContent: '+ Link',
+      onClick: e => {
+        e.stopPropagation();
+        addLink(tab.id, containerData.id);
+      },
+    });
+    const delContainerBtn = createEl('button', {
+      className: 'btn btn-delete',
+      textContent: '×',
+      onClick: e => {
+        e.stopPropagation();
+        deleteContainer(tab.id, containerData.id);
+      },
+    });
+    headerActions.appendChild(addLinkBtn);
+    headerActions.appendChild(delContainerBtn);
     header.appendChild(nameEl);
     header.appendChild(stats);
+    header.appendChild(headerActions);
 
-    const content = createEl('div', { className: 'container-content' });
+    const content = createEl('div', {
+      className: 'container-content',
+      attrs: { 'data-tab-id': tab.id, 'data-container-id': containerData.id },
+    });
     containerData.links.forEach(link => {
       const linkRow = createEl('div', { className: 'link' });
       const anchor = createEl('a', {
@@ -196,6 +296,15 @@ function renderActiveTab(container) {
   });
 
   container.appendChild(containersGrid);
+
+  const addContainerBtn = createEl('button', {
+    className: 'btn btn-primary',
+    textContent: '+ Container',
+    onClick: () => addContainer(tab.id),
+  });
+  container.appendChild(addContainerBtn);
+
+  initSortable();
 }
 
 function render() {
@@ -221,3 +330,51 @@ async function init() {
 }
 
 document.addEventListener('DOMContentLoaded', init);
+
+function initSortable() {
+  if (!window.Sortable) return;
+  // Links
+  document.querySelectorAll('.container-content').forEach(listEl => {
+    new Sortable(listEl, {
+      group: 'links',
+      animation: 150,
+      onEnd: evt => {
+        const fromContainerId = evt.from.dataset.containerId;
+        const toContainerId = evt.to.dataset.containerId;
+        const fromTabId = evt.from.dataset.tabId;
+        const toTabId = evt.to.dataset.tabId;
+        const fromTab = state.data.tabs.find(t => t.id === fromTabId);
+        const toTab = state.data.tabs.find(t => t.id === toTabId);
+        const fromContainer = fromTab?.containers.find(
+          c => c.id === fromContainerId
+        );
+        const toContainer = toTab?.containers.find(c => c.id === toContainerId);
+        if (!fromContainer || !toContainer) return;
+        const [moved] = fromContainer.links.splice(evt.oldIndex, 1);
+        toContainer.links.splice(evt.newIndex, 0, moved);
+        persist();
+        render();
+      },
+    });
+  });
+
+  // Containers
+  document.querySelectorAll('.containers').forEach(listEl => {
+    new Sortable(listEl, {
+      group: 'containers',
+      animation: 150,
+      handle: '.container-header',
+      onEnd: evt => {
+        const fromTabId = evt.from.dataset.tabId;
+        const toTabId = evt.to.dataset.tabId;
+        const fromTab = state.data.tabs.find(t => t.id === fromTabId);
+        const toTab = state.data.tabs.find(t => t.id === toTabId);
+        if (!fromTab || !toTab) return;
+        const [moved] = fromTab.containers.splice(evt.oldIndex, 1);
+        toTab.containers.splice(evt.newIndex, 0, moved);
+        persist();
+        render();
+      },
+    });
+  });
+}

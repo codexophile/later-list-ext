@@ -230,6 +230,7 @@ body {
   background: var(--bg-secondary);
   border-radius: 8px;
   overflow-x: auto;
+  align-items: center;
 }
 
 .tab {
@@ -276,6 +277,11 @@ body {
 .container-content {
   min-height: 100px;
   padding: 12px;
+}
+
+.container-actions {
+  display: flex;
+  gap: 6px;
 }
 
 .duplicate-id {

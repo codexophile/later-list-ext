@@ -58,7 +58,11 @@ async function loadDataAndPopulatePickers() {
   const tabs = data?.tabs || [];
   if (!tabs.length) {
     populateSelect(tabSelect, [{ id: '', label: 'No tabs found' }], '');
-    populateSelect(containerSelect, [{ id: '', label: 'No containers found' }], '');
+    populateSelect(
+      containerSelect,
+      [{ id: '', label: 'No containers found' }],
+      ''
+    );
     return;
   }
 

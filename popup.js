@@ -3,6 +3,7 @@
 let currentPage = {
   url: '',
   title: '',
+  tabId: null,
 };
 
 function setStatus(text) {
@@ -14,8 +15,10 @@ function setStatus(text) {
 
 function setBusy(isBusy) {
   const saveBtn = document.getElementById('save-current');
+  const saveCloseBtn = document.getElementById('save-close');
   const openBtn = document.getElementById('open-view');
   if (saveBtn) saveBtn.disabled = isBusy;
+  if (saveCloseBtn) saveCloseBtn.disabled = isBusy;
   if (openBtn) openBtn.disabled = isBusy;
 }
 
@@ -38,6 +41,7 @@ async function loadCurrentTab() {
 
   currentPage.url = activeTab?.url || '';
   currentPage.title = activeTab?.title || activeTab?.url || '';
+  currentPage.tabId = typeof activeTab?.id === 'number' ? activeTab.id : null;
 
   const titleEl = document.getElementById('page-title');
   const urlEl = document.getElementById('page-url');
@@ -83,7 +87,7 @@ async function loadDataAndPopulatePickers() {
   updateContainers();
 }
 
-async function saveCurrentToSelection() {
+async function saveToSelection({ closeTabAfterSave }) {
   if (!currentPage.url) return setStatus('No active tab URL found');
 
   const tabSelect = document.getElementById('tab-select');
@@ -107,12 +111,36 @@ async function saveCurrentToSelection() {
       setStatus(result.error);
       return;
     }
+
+    if (closeTabAfterSave) {
+      const tabIdToClose =
+        typeof currentPage.tabId === 'number'
+          ? currentPage.tabId
+          : (await chrome.tabs.query({ active: true, currentWindow: true }))[0]
+              ?.id;
+
+      if (typeof tabIdToClose === 'number') {
+        await chrome.tabs.remove(tabIdToClose);
+        return;
+      }
+      setStatus('Saved (could not close tab)');
+      return;
+    }
+
     setStatus('Saved');
   } catch {
     setStatus('Save failed');
   } finally {
     setBusy(false);
   }
+}
+
+async function saveCurrentToSelection() {
+  return saveToSelection({ closeTabAfterSave: false });
+}
+
+async function saveAndCloseCurrentTab() {
+  return saveToSelection({ closeTabAfterSave: true });
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -123,6 +151,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   document
     .getElementById('save-current')
     ?.addEventListener('click', saveCurrentToSelection);
+
+  document
+    .getElementById('save-close')
+    ?.addEventListener('click', saveAndCloseCurrentTab);
 
   try {
     await loadCurrentTab();

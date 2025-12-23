@@ -221,10 +221,37 @@ function renderTabs(container) {
   container.appendChild(tabsWrapper);
 }
 
-function handleOpenLink(url, sendToArchive) {
+function ensureArchiveContainer() {
+  const firstTab = state.data.tabs[0];
+  if (!firstTab) return null;
+  let archiveContainer = firstTab.containers.find(c => c.name === 'Archived');
+  if (!archiveContainer) {
+    archiveContainer = { id: id('container'), name: 'Archived', links: [] };
+    firstTab.containers.push(archiveContainer);
+  }
+  return archiveContainer;
+}
+
+function archiveLink(tabId, containerId, linkId) {
+  const tab = state.data.tabs.find(t => t.id === tabId);
+  const container = tab?.containers.find(c => c.id === containerId);
+  if (!container) return;
+  const linkIndex = container.links.findIndex(l => l.id === linkId);
+  if (linkIndex === -1) return;
+  const [link] = container.links.splice(linkIndex, 1);
+  const archiveContainer = ensureArchiveContainer();
+  if (archiveContainer) {
+    archiveContainer.links.push(link);
+  }
+  persist();
+  render();
+}
+
+function handleOpenLink(url, tabId, containerId, linkId) {
   chrome.tabs.create({ url, active: false });
-  if (!sendToArchive) return;
-  // TODO: move opened link to an archive container when archive feature is added.
+  if (tabId && containerId && linkId) {
+    archiveLink(tabId, containerId, linkId);
+  }
 }
 
 function deleteLink(tabId, containerId, linkId) {
@@ -271,6 +298,11 @@ function renderActiveTab(container) {
           textContent: link.title,
           attrs: { href: link.url, target: '_blank' },
         });
+        anchor.addEventListener('click', e => {
+          e.preventDefault();
+          chrome.tabs.create({ url: link.url, active: false });
+        });
+        anchor.title = 'Click to open';
         const actions = createEl('div', { className: 'trash-actions' });
         const restoreBtn = createEl('button', {
           className: 'btn btn-restore',
@@ -357,8 +389,9 @@ function renderActiveTab(container) {
       });
       anchor.addEventListener('click', e => {
         e.preventDefault();
-        handleOpenLink(link.url, true);
+        handleOpenLink(link.url, tab.id, containerData.id, link.id);
       });
+      anchor.title = 'Click to open (will be archived)';
       anchor.addEventListener('dblclick', e => {
         e.preventDefault();
         e.stopPropagation();
@@ -397,12 +430,156 @@ function renderActiveTab(container) {
   initSortable();
 }
 
+function exportToJSON() {
+  const json = JSON.stringify(state.data, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `laterlist-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function importFromJSON(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const imported = JSON.parse(e.target.result);
+      if (!imported.tabs || !Array.isArray(imported.tabs)) {
+        alert('Invalid LaterList JSON format');
+        return;
+      }
+      if (
+        !confirm(
+          'Merge imported data with existing data? (Cancel to replace all)'
+        )
+      ) {
+        state.data = imported;
+      } else {
+        state.data.tabs.push(...imported.tabs);
+        state.data.trash = state.data.trash || [];
+        if (imported.trash) state.data.trash.push(...imported.trash);
+      }
+      persist();
+      render();
+    } catch (err) {
+      alert('Error parsing JSON: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+}
+
+function importFromOneTab(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const text = e.target.result;
+      const lines = text.trim().split('\n');
+      const firstTab = state.data.tabs[0] || {
+        id: id('tab'),
+        name: 'Imported',
+        containers: [],
+      };
+      const container = firstTab.containers[0] || {
+        id: id('container'),
+        name: 'Imported',
+        links: [],
+      };
+
+      lines.forEach(line => {
+        const trimmed = line.trim();
+        if (
+          !trimmed ||
+          trimmed.startsWith('http://localhost') ||
+          trimmed === '(Archived)'
+        )
+          return;
+
+        try {
+          const url = new URL(trimmed);
+          const title = url.hostname || url.toString();
+          container.links.push({ id: id('link'), title, url: url.toString() });
+        } catch {
+          // Skip invalid URLs
+        }
+      });
+
+      if (!firstTab.id) {
+        firstTab.id = id('tab');
+        state.data.tabs.push(firstTab);
+      }
+      if (!container.id) {
+        container.id = id('container');
+        firstTab.containers.push(container);
+      }
+
+      persist();
+      render();
+      alert(`Imported ${container.links.length} links`);
+    } catch (err) {
+      alert('Error importing OneTab format: ' + err.message);
+    }
+  };
+  reader.readAsText(file);
+}
+
 function render() {
   const app = document.getElementById('app');
   app.innerHTML = '';
 
   const header = createEl('div', { className: 'header' });
   header.appendChild(createEl('h1', { textContent: 'LaterList' }));
+
+  // Import/Export buttons
+  const toolsDiv = createEl('div', { className: 'header-tools' });
+
+  const exportBtn = createEl('button', {
+    className: 'btn btn-primary',
+    textContent: '⬇ Export',
+    onClick: exportToJSON,
+    title: 'Download backup as JSON',
+  });
+
+  const importJsonInput = document.createElement('input');
+  importJsonInput.type = 'file';
+  importJsonInput.accept = '.json';
+  importJsonInput.style.display = 'none';
+  importJsonInput.addEventListener('change', e => {
+    if (e.target.files[0]) importFromJSON(e.target.files[0]);
+    e.target.value = '';
+  });
+
+  const importJsonBtn = createEl('button', {
+    className: 'btn btn-primary',
+    textContent: '⬆ Import JSON',
+    onClick: () => importJsonInput.click(),
+    title: 'Restore from JSON backup',
+  });
+
+  const importOnetabInput = document.createElement('input');
+  importOnetabInput.type = 'file';
+  importOnetabInput.accept = '.txt';
+  importOnetabInput.style.display = 'none';
+  importOnetabInput.addEventListener('change', e => {
+    if (e.target.files[0]) importFromOneTab(e.target.files[0]);
+    e.target.value = '';
+  });
+
+  const importOnetabBtn = createEl('button', {
+    className: 'btn btn-secondary',
+    textContent: '⬆ Import OneTab',
+    onClick: () => importOnetabInput.click(),
+    title: 'Import from OneTab text format',
+  });
+
+  toolsDiv.appendChild(exportBtn);
+  toolsDiv.appendChild(importJsonBtn);
+  toolsDiv.appendChild(importOnetabBtn);
+  toolsDiv.appendChild(importJsonInput);
+  toolsDiv.appendChild(importOnetabInput);
+  header.appendChild(toolsDiv);
+
   app.appendChild(header);
 
   const tabsContainer = createEl('div');

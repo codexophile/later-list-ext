@@ -581,15 +581,7 @@ function renderActiveTab(container) {
     const header = createEl('div', { className: 'container-header' });
     const nameEl = createEl('div', {
       textContent: containerData.name,
-      onClick: e => {
-        if (e.shiftKey) {
-          e.stopPropagation();
-          makeEditable(nameEl, newName =>
-            renameContainer(tab.id, containerData.id, newName)
-          );
-        }
-      },
-      title: 'Shift+click to rename',
+      className: 'container-name',
       style: 'cursor: default; flex: 1;',
     });
     const stats = createEl('div', {
@@ -597,22 +589,40 @@ function renderActiveTab(container) {
       textContent: `${containerData.links.length} links`,
     });
     const headerActions = createEl('div', { className: 'container-actions' });
+
+    const renameBtn = createEl('button', {
+      className: 'container-action-btn',
+      html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
+      title: 'Rename container',
+      onClick: e => {
+        e.stopPropagation();
+        makeEditable(nameEl, newName =>
+          renameContainer(tab.id, containerData.id, newName)
+        );
+      },
+    });
+
     const addLinkBtn = createEl('button', {
-      className: 'btn btn-primary',
-      textContent: '+ Link',
+      className: 'container-action-btn',
+      html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>',
+      title: 'Add link',
       onClick: e => {
         e.stopPropagation();
         addLink(tab.id, containerData.id);
       },
     });
+
     const delContainerBtn = createEl('button', {
-      className: 'btn btn-delete',
-      textContent: '×',
+      className: 'container-action-btn container-delete-btn',
+      html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
+      title: 'Delete container',
       onClick: e => {
         e.stopPropagation();
         deleteContainer(tab.id, containerData.id);
       },
     });
+
+    headerActions.appendChild(renameBtn);
     headerActions.appendChild(addLinkBtn);
     headerActions.appendChild(delContainerBtn);
     header.appendChild(nameEl);

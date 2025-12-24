@@ -6,6 +6,8 @@ let state = {
   data: null,
   activeTabId: null,
   duplicateUrls: new Set(),
+  viewMode: 'links',
+  aggressiveNormalization: false,
 };
 
 const id = prefix =>
@@ -122,6 +124,7 @@ function migrateAndFixData(data) {
             id: id('link'),
             title: 'Link',
             url: '',
+            savedAt: Date.now(),
           };
           changed = true;
           link = container.links[linkIndex];
@@ -141,6 +144,15 @@ function migrateAndFixData(data) {
         const nextUrl = ensureString(link.url, '');
         if (link.url !== nextUrl) {
           link.url = nextUrl;
+          changed = true;
+        }
+
+        const nextSavedAt =
+          typeof link.savedAt === 'number' && Number.isFinite(link.savedAt)
+            ? link.savedAt
+            : Date.now();
+        if (link.savedAt !== nextSavedAt) {
+          link.savedAt = nextSavedAt;
           changed = true;
         }
       });
@@ -168,6 +180,15 @@ function migrateAndFixData(data) {
     const nextUrl = ensureString(link.url, '');
     if (link.url !== nextUrl) {
       link.url = nextUrl;
+      changed = true;
+    }
+
+    const nextSavedAt =
+      typeof link.savedAt === 'number' && Number.isFinite(link.savedAt)
+        ? link.savedAt
+        : Date.now();
+    if (link.savedAt !== nextSavedAt) {
+      link.savedAt = nextSavedAt;
       changed = true;
     }
   });
@@ -209,10 +230,61 @@ async function persist() {
 function normalizeUrl(url) {
   try {
     const u = new URL(url);
-    return u.origin + u.pathname.replace(/\/$/, '') + u.search;
+    const params = new URLSearchParams(u.search);
+
+    // Only strip tracking params if aggressive mode is enabled
+    if (state.aggressiveNormalization) {
+      const TRACKING_PREFIXES = ['utm_', 'icid', 'fbclid', 'gclid', 'mc_eid'];
+      const TRACKING_KEYS = ['ref', 'ref_src', 'igshid'];
+
+      // Drop common tracking params
+      [...params.keys()].forEach(key => {
+        if (
+          TRACKING_KEYS.includes(key) ||
+          TRACKING_PREFIXES.some(prefix => key.startsWith(prefix))
+        ) {
+          params.delete(key);
+        }
+      });
+    }
+
+    const path = u.pathname.replace(/\/+$/, '');
+    const query = params.toString();
+    const base = `${u.protocol}//${u.host}${path || '/'}`;
+    return (query ? `${base}?${query}` : base).toLowerCase();
   } catch {
     return url.toLowerCase().trim();
   }
+}
+
+function collectDuplicateGroups() {
+  const map = new Map();
+
+  state.data.tabs.forEach(tab => {
+    tab.containers.forEach(container => {
+      container.links.forEach(link => {
+        const normalized = normalizeUrl(link.url);
+        if (!map.has(normalized)) {
+          map.set(normalized, []);
+        }
+        map.get(normalized).push({
+          tabId: tab.id,
+          tabName: tab.name,
+          containerId: container.id,
+          containerName: container.name,
+          linkId: link.id,
+          title: link.title,
+          url: link.url,
+          savedAt: link.savedAt,
+        });
+      });
+    });
+  });
+
+  return [...map.entries()]
+    .filter(([, links]) => links.length > 1)
+    .map(([normalized, links]) => ({ normalized, links }))
+    .sort((a, b) => b.links.length - a.links.length);
 }
 
 function findAllDuplicates() {
@@ -286,7 +358,7 @@ function addLink(tabId, containerId) {
   const tab = state.data.tabs.find(t => t.id === tabId);
   const container = tab?.containers.find(c => c.id === containerId);
   if (!container) return;
-  container.links.push({ id: id('link'), title, url });
+  container.links.push({ id: id('link'), title, url, savedAt: Date.now() });
   persist();
   render();
 }
@@ -324,6 +396,11 @@ function setActiveTab(tabId) {
   render();
 }
 
+function setViewMode(mode) {
+  state.viewMode = mode;
+  render();
+}
+
 function createEl(tag, opts = {}) {
   const el = document.createElement(tag);
   if (opts.className) el.className = opts.className;
@@ -334,6 +411,37 @@ function createEl(tag, opts = {}) {
   if (opts.onClick) el.addEventListener('click', opts.onClick);
   if (opts.style) el.style.cssText = opts.style;
   return el;
+}
+
+function formatRelativeTime(timestamp) {
+  if (!timestamp) return '';
+  const diffMs = Date.now() - timestamp;
+  const diffMinutes = Math.floor(diffMs / 60000);
+  if (diffMinutes < 1) return 'just now';
+  if (diffMinutes < 60) return `${diffMinutes}m ago`;
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays < 7) return `${diffDays}d ago`;
+  const diffWeeks = Math.floor(diffDays / 7);
+  if (diffWeeks < 4) return `${diffWeeks}w ago`;
+  const diffMonths = Math.floor(diffDays / 30);
+  if (diffMonths < 12) return `${diffMonths}mo ago`;
+  const diffYears = Math.floor(diffDays / 365);
+  return `${diffYears}y ago`;
+}
+
+function prettyUrl(url) {
+  try {
+    const u = new URL(url);
+    // Keep query params and hash, just strip protocol prefix
+    const path = u.pathname;
+    const query = u.search;
+    const hash = u.hash;
+    return `${u.hostname}${path}${query}${hash}` || url;
+  } catch {
+    return url;
+  }
 }
 
 function makeEditable(el, onSave) {
@@ -493,6 +601,18 @@ function deleteLink(tabId, containerId, linkId) {
   state.data.trash.push(removed);
   persist();
   render();
+}
+
+function moveLinkToTrash(tabId, containerId, linkId) {
+  const tab = state.data.tabs.find(t => t.id === tabId);
+  const container = tab?.containers.find(c => c.id === containerId);
+  if (!container) return null;
+  const linkIndex = container.links.findIndex(l => l.id === linkId);
+  if (linkIndex === -1) return null;
+  const [removed] = container.links.splice(linkIndex, 1);
+  state.data.trash = state.data.trash || [];
+  state.data.trash.push(removed);
+  return removed;
 }
 
 function restoreLink(linkId) {
@@ -818,6 +938,7 @@ function processOneTabImport(text) {
               id: id('link'),
               title: titlePart || url.hostname || url.toString(),
               url: url.toString(),
+              savedAt: Date.now(),
             });
           } catch {
             // Skip invalid URLs
@@ -830,6 +951,7 @@ function processOneTabImport(text) {
               id: id('link'),
               title: url.hostname || url.toString(),
               url: url.toString(),
+              savedAt: Date.now(),
             });
           } catch {
             // Skip invalid URLs
@@ -1026,9 +1148,180 @@ function showImportModal(type = 'json') {
   document.body.appendChild(modal);
 }
 
+function trashGroupExcept(group, strategy = 'newest') {
+  if (!group || group.links.length < 2) return;
+
+  let keepIndex = 0;
+  if (strategy === 'newest') {
+    keepIndex = group.links.reduce(
+      (bestIdx, item, idx, arr) =>
+        item.savedAt > arr[bestIdx].savedAt ? idx : bestIdx,
+      0
+    );
+  } else if (strategy === 'oldest') {
+    keepIndex = group.links.reduce(
+      (bestIdx, item, idx, arr) =>
+        item.savedAt < arr[bestIdx].savedAt ? idx : bestIdx,
+      0
+    );
+  }
+
+  const trashed = [];
+  group.links.forEach((linkRef, idx) => {
+    if (idx === keepIndex) return;
+    const removed = moveLinkToTrash(
+      linkRef.tabId,
+      linkRef.containerId,
+      linkRef.linkId
+    );
+    if (removed) trashed.push(removed);
+  });
+
+  if (!trashed.length) return;
+  persist();
+  render();
+}
+
+function renderDuplicates(container, duplicateGroups) {
+  container.innerHTML = '';
+
+  if (!duplicateGroups.length) {
+    const empty = createEl('div', {
+      className: 'duplicate-empty',
+      textContent: 'No duplicates found. Nice and tidy!',
+    });
+    container.appendChild(empty);
+    return;
+  }
+
+  const summaryRow = createEl('div', {
+    className: 'duplicate-summary-row',
+  });
+
+  const summary = createEl('div', {
+    className: 'duplicate-summary',
+    textContent: `${duplicateGroups.length} duplicate group(s) detected`,
+  });
+
+  const normalizeToggle = createEl('label', {
+    className: 'duplicate-normalize-toggle',
+  });
+  const checkbox = createEl('input', { attrs: { type: 'checkbox' } });
+  checkbox.checked = state.aggressiveNormalization;
+  checkbox.addEventListener('change', () => {
+    state.aggressiveNormalization = checkbox.checked;
+    render();
+  });
+  const label = createEl('span', {
+    textContent: 'Strip tracking params (utm_, fbclid, etc.)',
+  });
+  normalizeToggle.appendChild(checkbox);
+  normalizeToggle.appendChild(label);
+
+  summaryRow.appendChild(summary);
+  summaryRow.appendChild(normalizeToggle);
+  container.appendChild(summaryRow);
+
+  duplicateGroups.forEach(group => {
+    const card = createEl('div', { className: 'duplicate-card' });
+    const header = createEl('div', { className: 'duplicate-card-header' });
+
+    const urlEl = createEl('div', {
+      className: 'duplicate-url',
+      textContent: prettyUrl(group.links[0].url),
+    });
+
+    const badge = createEl('span', {
+      className: 'duplicate-count',
+      textContent: `${group.links.length} copies`,
+    });
+
+    const actions = createEl('div', { className: 'duplicate-bulk-actions' });
+    const keepNewestBtn = createEl('button', {
+      className: 'btn btn-primary',
+      textContent: 'Keep newest',
+      onClick: () => trashGroupExcept(group, 'newest'),
+    });
+
+    const keepOldestBtn = createEl('button', {
+      className: 'btn btn-secondary',
+      textContent: 'Keep oldest',
+      onClick: () => trashGroupExcept(group, 'oldest'),
+    });
+
+    actions.appendChild(keepNewestBtn);
+    actions.appendChild(keepOldestBtn);
+
+    header.appendChild(urlEl);
+    header.appendChild(badge);
+    header.appendChild(actions);
+    card.appendChild(header);
+
+    const list = createEl('div', { className: 'duplicate-list' });
+
+    group.links
+      .slice()
+      .sort((a, b) => b.savedAt - a.savedAt)
+      .forEach(linkRef => {
+        const row = createEl('div', { className: 'duplicate-row' });
+        const left = createEl('div', { className: 'duplicate-row-main' });
+
+        const title = createEl('div', {
+          className: 'duplicate-title',
+          textContent: linkRef.title,
+        });
+
+        const meta = createEl('div', {
+          className: 'duplicate-meta',
+          textContent: `${linkRef.tabName} · ${
+            linkRef.containerName
+          } · ${formatRelativeTime(linkRef.savedAt)}`,
+        });
+
+        left.appendChild(title);
+        left.appendChild(meta);
+
+        const right = createEl('div', { className: 'duplicate-row-actions' });
+
+        const openBtn = createEl('button', {
+          className: 'btn btn-secondary',
+          textContent: 'Open',
+          onClick: () =>
+            chrome.tabs.create({ url: linkRef.url, active: false }),
+        });
+
+        const trashBtn = createEl('button', {
+          className: 'btn btn-delete',
+          textContent: 'Trash',
+          onClick: () => {
+            const removed = moveLinkToTrash(
+              linkRef.tabId,
+              linkRef.containerId,
+              linkRef.linkId
+            );
+            if (removed) {
+              persist();
+              render();
+            }
+          },
+        });
+
+        right.appendChild(openBtn);
+        right.appendChild(trashBtn);
+
+        row.appendChild(left);
+        row.appendChild(right);
+        list.appendChild(row);
+      });
+
+    card.appendChild(list);
+    container.appendChild(card);
+  });
+}
+
 function render() {
-  // Calculate duplicates before rendering
-  state.duplicateUrls = findAllDuplicates();
+  const duplicateGroups = collectDuplicateGroups();
+  state.duplicateUrls = new Set(duplicateGroups.map(group => group.normalized));
 
   const app = document.getElementById('app');
   app.innerHTML = '';
@@ -1038,6 +1331,21 @@ function render() {
 
   // Import/Export buttons
   const toolsDiv = createEl('div', { className: 'header-tools' });
+
+  const linksViewBtn = createEl('button', {
+    className:
+      state.viewMode === 'links' ? 'btn btn-primary' : 'btn btn-secondary',
+    textContent: 'Saved Links',
+    onClick: () => setViewMode('links'),
+  });
+
+  const duplicatesBtn = createEl('button', {
+    className:
+      state.viewMode === 'duplicates' ? 'btn btn-primary' : 'btn btn-secondary',
+    textContent: `Duplicates (${duplicateGroups.length})`,
+    onClick: () => setViewMode('duplicates'),
+    title: 'Review duplicate URLs',
+  });
 
   const exportBtn = createEl('button', {
     className: 'btn btn-primary',
@@ -1067,6 +1375,8 @@ function render() {
     title: 'Open settings',
   });
 
+  toolsDiv.appendChild(linksViewBtn);
+  toolsDiv.appendChild(duplicatesBtn);
   toolsDiv.appendChild(exportBtn);
   toolsDiv.appendChild(importJsonBtn);
   toolsDiv.appendChild(importOnetabBtn);
@@ -1080,7 +1390,11 @@ function render() {
   app.appendChild(tabsContainer);
 
   const activeArea = createEl('div');
-  renderActiveTab(activeArea);
+  if (state.viewMode === 'duplicates') {
+    renderDuplicates(activeArea, duplicateGroups);
+  } else {
+    renderActiveTab(activeArea);
+  }
   app.appendChild(activeArea);
 
   // Now that the active area is attached to the document, initialize Sortable.

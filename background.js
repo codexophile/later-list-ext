@@ -20,11 +20,13 @@ const DEFAULT_DATA = {
               id: 'link-1',
               title: 'LaterList (repo)',
               url: 'https://example.com/laterlist',
+              savedAt: Date.now(),
             },
             {
               id: 'link-2',
               title: 'MDN: WebExtensions',
               url: 'https://developer.mozilla.org/docs/Mozilla/Add-ons/WebExtensions',
+              savedAt: Date.now(),
             },
           ],
         },
@@ -145,6 +147,7 @@ async function sendAllBrowserTabsToLaterList() {
           id: `link-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
           title: tab.title || tab.url,
           url: tab.url,
+          savedAt: Date.now(),
         });
         savedTabIds.push(tab.id);
       }
@@ -239,6 +242,7 @@ async function addLink({ url, title, tabId, containerId }) {
     id: `link-${Date.now()}`,
     title: title || url,
     url,
+    savedAt: Date.now(),
   };
 
   container.links.push(newLink);

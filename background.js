@@ -1,6 +1,11 @@
 // background.js
 // Core data store and background services for LaterList.
 
+const DEFAULT_SETTINGS = {
+  containerNameFormat: 'ddd, MMM DD, YYYY at HHmm Hrs',
+  sendAllTabsDestination: '', // Empty means first tab
+};
+
 const DEFAULT_DATA = {
   tabs: [
     {
@@ -38,6 +43,142 @@ async function getData() {
 
 async function saveData(data) {
   await chrome.storage.local.set({ readLaterData: data });
+}
+
+async function getSettings() {
+  const stored = await chrome.storage.local.get('laterlistSettings');
+  return { ...DEFAULT_SETTINGS, ...(stored.laterlistSettings || {}) };
+}
+
+// Simple date formatter
+function formatContainerName(date, formatString) {
+  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const months = [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ];
+
+  const pad = n => String(n).padStart(2, '0');
+
+  const tokens = {
+    YYYY: date.getFullYear(),
+    YY: String(date.getFullYear()).slice(-2),
+    MMM: months[date.getMonth()],
+    MM: pad(date.getMonth() + 1),
+    DD: pad(date.getDate()),
+    ddd: days[date.getDay()],
+    HH: pad(date.getHours()),
+    mm: pad(date.getMinutes()),
+    HHmm: pad(date.getHours()) + pad(date.getMinutes()),
+  };
+
+  let result = formatString;
+  Object.entries(tokens).forEach(([token, value]) => {
+    result = result.replace(new RegExp(token, 'g'), value);
+  });
+
+  return result;
+}
+
+async function sendAllBrowserTabsToLaterList() {
+  try {
+    // Get all browser tabs from all windows
+    const allBrowserTabs = await chrome.tabs.query({});
+
+    // Get the view.html URL to filter it out
+    const viewUrl = chrome.runtime.getURL('view.html');
+
+    // Filter: exclude pinned tabs, view.html, and non-http(s) URLs
+    const tabsToSave = allBrowserTabs.filter(
+      tab =>
+        !tab.pinned &&
+        !tab.url.includes('view.html') &&
+        !tab.url.startsWith(viewUrl) &&
+        (tab.url.startsWith('http://') || tab.url.startsWith('https://'))
+    );
+
+    if (tabsToSave.length === 0) {
+      return {
+        success: false,
+        error: 'No tabs to save (all tabs are pinned or excluded)',
+      };
+    }
+
+    // Get settings and data
+    const settings = await getSettings();
+    const data = await getData();
+
+    // Determine destination tab
+    let targetTab;
+    if (settings.sendAllTabsDestination) {
+      targetTab = data.tabs.find(t => t.id === settings.sendAllTabsDestination);
+    }
+    if (!targetTab) {
+      targetTab = ensureTab(data, null); // Use first tab as fallback
+    }
+
+    // Create new container with formatted name
+    const containerName = formatContainerName(
+      new Date(),
+      settings.containerNameFormat
+    );
+    const newContainer = {
+      id: `container-${Date.now()}`,
+      name: containerName,
+      links: [],
+    };
+
+    // Convert browser tabs to links
+    const savedTabIds = [];
+    tabsToSave.forEach(tab => {
+      if (tab.url && tab.id !== undefined) {
+        newContainer.links.push({
+          id: `link-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+          title: tab.title || tab.url,
+          url: tab.url,
+        });
+        savedTabIds.push(tab.id);
+      }
+    });
+
+    // Add container to the BEGINNING of the target tab
+    targetTab.containers.unshift(newContainer);
+
+    // Save data
+    await saveData(data);
+
+    // Close successfully saved tabs
+    if (savedTabIds.length > 0) {
+      try {
+        await chrome.tabs.remove(savedTabIds);
+      } catch (err) {
+        console.warn('Some tabs could not be closed:', err);
+      }
+    }
+
+    return {
+      success: true,
+      count: savedTabIds.length,
+      containerName,
+      targetTabName: targetTab.name,
+    };
+  } catch (err) {
+    console.error('Error sending all tabs:', err);
+    return {
+      success: false,
+      error: err.message || 'Unknown error',
+    };
+  }
 }
 
 function ensureTab(data, tabId) {
@@ -144,5 +285,34 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .catch(err => sendResponse({ error: err?.message }));
     return true;
   }
+  if (message?.type === 'laterlist:sendAllTabs') {
+    sendAllBrowserTabsToLaterList()
+      .then(result => sendResponse(result))
+      .catch(err => sendResponse({ success: false, error: err?.message }));
+    return true;
+  }
   return false;
+});
+
+// Keyboard command handler
+chrome.commands.onCommand.addListener(command => {
+  if (command === 'send-all-tabs') {
+    sendAllBrowserTabsToLaterList().then(result => {
+      if (result.success) {
+        chrome.notifications.create({
+          type: 'basic',
+          iconUrl: 'icon.png',
+          title: 'LaterList',
+          message: `${result.count} tabs saved to "${result.containerName}"`,
+        });
+      } else {
+        chrome.notifications.create({
+          type: 'basic',
+          iconUrl: 'icon.png',
+          title: 'LaterList Error',
+          message: result.error || 'Failed to save tabs',
+        });
+      }
+    });
+  }
 });

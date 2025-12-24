@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title>LaterList Settings</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    body {
+      padding: 20px;
+      max-width: 700px;
+      margin: 0 auto;
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #1a1a1a;
+      color: #e0e0e0;
+    }
+
+    .settings-header {
+      margin-bottom: 30px;
+      padding-bottom: 15px;
+      border-bottom: 2px solid #333;
+    }
+
+    .settings-header h1 {
+      margin: 0 0 5px 0;
+      font-size: 24px;
+      color: #fff;
+    }
+
+    .settings-header p {
+      margin: 0;
+      color: #999;
+      font-size: 14px;
+    }
+
+    .setting-section {
+      background: #242424;
+      padding: 20px;
+      margin-bottom: 20px;
+      border-radius: 8px;
+      border: 1px solid #333;
+    }
+
+    .setting-section h2 {
+      margin: 0 0 15px 0;
+      font-size: 16px;
+      color: #fff;
+      font-weight: 600;
+    }
+
+    .setting-group {
+      margin-bottom: 15px;
+    }
+
+    .setting-group:last-child {
+      margin-bottom: 0;
+    }
+
+    .setting-label {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      color: #ccc;
+    }
+
+    .setting-input {
+      width: 100%;
+      padding: 8px 12px;
+      background: #1a1a1a;
+      border: 1px solid #444;
+      border-radius: 4px;
+      color: #e0e0e0;
+      font-size: 14px;
+      font-family: 'Consolas', 'Monaco', monospace;
+      box-sizing: border-box;
+    }
+
+    .setting-input:focus {
+      outline: none;
+      border-color: #4a9eff;
+    }
+
+    .setting-select {
+      width: 100%;
+      padding: 8px 12px;
+      background: #1a1a1a;
+      border: 1px solid #444;
+      border-radius: 4px;
+      color: #e0e0e0;
+      font-size: 14px;
+      box-sizing: border-box;
+    }
+
+    .setting-select:focus {
+      outline: none;
+      border-color: #4a9eff;
+    }
+
+    .setting-help {
+      margin-top: 6px;
+      font-size: 13px;
+      color: #888;
+      line-height: 1.4;
+    }
+
+    .setting-help code {
+      background: #1a1a1a;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-family: 'Consolas', 'Monaco', monospace;
+      color: #4a9eff;
+    }
+
+    .setting-preview {
+      margin-top: 8px;
+      padding: 10px 12px;
+      background: #1a1a1a;
+      border: 1px solid #444;
+      border-radius: 4px;
+      font-size: 13px;
+      color: #aaa;
+    }
+
+    .setting-preview strong {
+      color: #4a9eff;
+    }
+
+    .save-button {
+      padding: 10px 20px;
+      background: #4a9eff;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .save-button:hover {
+      background: #3a8eef;
+    }
+
+    .save-button:disabled {
+      background: #333;
+      cursor: not-allowed;
+      color: #666;
+    }
+
+    .status-message {
+      margin-top: 15px;
+      padding: 10px 12px;
+      border-radius: 4px;
+      font-size: 14px;
+      display: none;
+    }
+
+    .status-message.success {
+      display: block;
+      background: #1a3a1a;
+      color: #6fc46f;
+      border: 1px solid #2d5a2d;
+    }
+
+    .status-message.error {
+      display: block;
+      background: #3a1a1a;
+      color: #f46f6f;
+      border: 1px solid #5a2d2d;
+    }
+
+    .back-link {
+      display: inline-block;
+      margin-top: 20px;
+      color: #4a9eff;
+      text-decoration: none;
+      font-size: 14px;
+    }
+
+    .back-link:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="settings-header">
+    <h1>⚙️ LaterList Settings</h1>
+    <p>Customize how browser tabs are sent to LaterList</p>
+  </div>
+
+  <div class="setting-section">
+    <h2>Send All Tabs Feature</h2>
+
+    <div class="setting-group">
+      <label class="setting-label" for="destination-tab">Destination Tab</label>
+      <select id="destination-tab" class="setting-select">
+        <option value="">Loading...</option>
+      </select>
+      <div class="setting-help">
+        Select which tab in your LaterList view should receive browser tabs when using "Send All Tabs"
+      </div>
+    </div>
+
+    <div class="setting-group">
+      <label class="setting-label" for="container-format">Container Name Format</label>
+      <input type="text" id="container-format" class="setting-input" placeholder="ddd, MMM DD, YYYY at HHmm Hrs">
+      <div class="setting-help">
+        Customize how container names are formatted when created. Available tokens:
+        <code>YYYY</code> (year),
+        <code>MMM</code> (month),
+        <code>DD</code> (day),
+        <code>ddd</code> (weekday),
+        <code>HHmm</code> (time)
+      </div>
+      <div class="setting-preview" id="format-preview">
+        Preview: <strong>Loading...</strong>
+      </div>
+    </div>
+  </div>
+
+  <button class="save-button" id="save-settings">Save Settings</button>
+  <div class="status-message" id="status-message"></div>
+
+  <a href="view.html" class="back-link">← Back to LaterList</a>
+
+  <script src="settings.js"></script>
+</body>
+
+</html>

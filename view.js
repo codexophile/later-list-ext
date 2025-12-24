@@ -851,9 +851,17 @@ function render() {
     title: 'Import from OneTab text format',
   });
 
+  const settingsBtn = createEl('button', {
+    className: 'btn btn-secondary',
+    textContent: '⚙️ Settings',
+    onClick: () => chrome.tabs.create({ url: 'settings.html' }),
+    title: 'Open settings',
+  });
+
   toolsDiv.appendChild(exportBtn);
   toolsDiv.appendChild(importJsonBtn);
   toolsDiv.appendChild(importOnetabBtn);
+  toolsDiv.appendChild(settingsBtn);
   toolsDiv.appendChild(importJsonInput);
   toolsDiv.appendChild(importOnetabInput);
   header.appendChild(toolsDiv);

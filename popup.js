@@ -17,9 +17,13 @@ function setBusy(isBusy) {
   const saveBtn = document.getElementById('save-current');
   const saveCloseBtn = document.getElementById('save-close');
   const openBtn = document.getElementById('open-view');
+  const sendAllBtn = document.getElementById('send-all-tabs');
+  const settingsBtn = document.getElementById('open-settings');
   if (saveBtn) saveBtn.disabled = isBusy;
   if (saveCloseBtn) saveCloseBtn.disabled = isBusy;
   if (openBtn) openBtn.disabled = isBusy;
+  if (sendAllBtn) sendAllBtn.disabled = isBusy;
+  if (settingsBtn) settingsBtn.disabled = isBusy;
 }
 
 function populateSelect(selectEl, options, selectedId) {
@@ -143,6 +147,29 @@ async function saveAndCloseCurrentTab() {
   return saveToSelection({ closeTabAfterSave: true });
 }
 
+async function sendAllTabs() {
+  setBusy(true);
+  setStatus('Sending all tabs...');
+
+  try {
+    const result = await chrome.runtime.sendMessage({
+      type: 'laterlist:sendAllTabs',
+    });
+
+    if (result?.success) {
+      setStatus(`✓ ${result.count} tabs saved to "${result.containerName}"`);
+      // Close popup after a brief delay
+      setTimeout(() => window.close(), 1500);
+    } else {
+      setStatus(result?.error || 'Failed to send tabs');
+    }
+  } catch (err) {
+    setStatus('Error: ' + (err.message || 'Unknown error'));
+  } finally {
+    setBusy(false);
+  }
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('open-view')?.addEventListener('click', () => {
     chrome.runtime.openOptionsPage();
@@ -155,6 +182,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   document
     .getElementById('save-close')
     ?.addEventListener('click', saveAndCloseCurrentTab);
+
+  document
+    .getElementById('send-all-tabs')
+    ?.addEventListener('click', sendAllTabs);
+
+  document.getElementById('open-settings')?.addEventListener('click', () => {
+    chrome.tabs.create({ url: 'settings.html' });
+  });
 
   try {
     await loadCurrentTab();

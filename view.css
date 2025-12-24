@@ -515,6 +515,36 @@ h1 {
   text-align: center;
 }
 
+.button-with-tooltip {
+  position: relative;
+}
+
+.btn-tooltip {
+  position: absolute;
+  left: 50%;
+  bottom: -28px;
+  transform: translateX(-50%);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 12px;
+  white-space: nowrap;
+  box-shadow: var(--shadow-sm);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s ease, visibility 0.15s ease;
+  z-index: 20;
+  pointer-events: none;
+}
+
+.button-with-tooltip:hover .btn-tooltip,
+.button-with-tooltip:focus-visible .btn-tooltip {
+  opacity: 1;
+  visibility: visible;
+}
+
 .btn {
   padding: 8px 14px;
   background: var(--bg-tertiary);

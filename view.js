@@ -446,6 +446,17 @@ function createEl(tag, opts = {}) {
   return el;
 }
 
+function attachTooltip(el, label, desc) {
+  if (!el) return el;
+  el.classList.add('button-with-tooltip');
+  const tip = createEl('span', {
+    className: 'btn-tooltip',
+    textContent: `${label}: ${desc}`,
+  });
+  el.appendChild(tip);
+  return el;
+}
+
 function formatRelativeTime(timestamp) {
   if (!timestamp) return '';
   const diffMs = Date.now() - timestamp;
@@ -545,6 +556,7 @@ function renderTabs(container) {
         makeEditable(tabName, newName => renameTab(tab.id, newName));
       },
     });
+    attachTooltip(renameBtn, 'Rename tab', 'Edit this tab name');
 
     const removeBtn = createEl('button', {
       className: 'tab-action-btn tab-delete-btn',
@@ -555,6 +567,11 @@ function renderTabs(container) {
         deleteTab(tab.id);
       },
     });
+    attachTooltip(
+      removeBtn,
+      'Delete tab',
+      'Move all links to trash and remove this tab'
+    );
 
     tabEl.appendChild(tabName);
     tabEl.appendChild(countEl);
@@ -585,6 +602,7 @@ function renderTabs(container) {
       addTab();
     },
   });
+  attachTooltip(addTabBtn, 'Add tab', 'Create a new tab');
   tabsWrapper.appendChild(addTabBtn);
 
   container.appendChild(tabsWrapper);
@@ -732,6 +750,12 @@ function renderActiveTab(container) {
             render();
           },
         });
+        attachTooltip(
+          restoreBtn,
+          'Restore',
+          'Return this link to your first tab'
+        );
+        attachTooltip(deleteBtn, 'Delete', 'Permanently remove this link');
         actions.appendChild(restoreBtn);
         actions.appendChild(deleteBtn);
         linkRow.appendChild(favicon);
@@ -775,6 +799,7 @@ function renderActiveTab(container) {
         );
       },
     });
+    attachTooltip(renameBtn, 'Rename container', 'Edit this container name');
 
     const addLinkBtn = createEl('button', {
       className: 'container-action-btn',
@@ -785,6 +810,7 @@ function renderActiveTab(container) {
         addLink(tab.id, containerData.id);
       },
     });
+    attachTooltip(addLinkBtn, 'Add link', 'Add a new link to this container');
 
     const trashAllBtn = createEl('button', {
       className: 'container-action-btn',
@@ -806,6 +832,7 @@ function renderActiveTab(container) {
         render();
       },
     });
+    attachTooltip(trashAllBtn, 'Trash all', 'Move every link here to Trash');
 
     const delContainerBtn = createEl('button', {
       className: 'container-action-btn container-delete-btn',
@@ -816,6 +843,11 @@ function renderActiveTab(container) {
         deleteContainer(tab.id, containerData.id);
       },
     });
+    attachTooltip(
+      delContainerBtn,
+      'Delete container',
+      'Move links to Trash and remove this container'
+    );
 
     headerActions.appendChild(renameBtn);
     headerActions.appendChild(addLinkBtn);
@@ -883,6 +915,7 @@ function renderActiveTab(container) {
         textContent: 'Trash',
         onClick: () => deleteLink(tab.id, containerData.id, link.id),
       });
+      attachTooltip(deleteBtn, 'Trash link', 'Send this link to Trash');
       actions.appendChild(deleteBtn);
       linkRow.appendChild(favicon);
       linkRow.appendChild(linkInfo);
@@ -1107,6 +1140,8 @@ function showExportModal(jsonText) {
     },
   });
 
+  attachTooltip(copyBtn, 'Copy', 'Copy this backup to your clipboard');
+
   const saveBtn = createEl('button', {
     className: 'btn btn-primary',
     textContent: '💾 Save as File',
@@ -1116,11 +1151,15 @@ function showExportModal(jsonText) {
     },
   });
 
+  attachTooltip(saveBtn, 'Save file', 'Download the backup as a JSON file');
+
   const closeBtn = createEl('button', {
     className: 'btn btn-secondary',
     textContent: 'Close',
     onClick: () => document.body.removeChild(modal),
   });
+
+  attachTooltip(closeBtn, 'Close', 'Close this export dialog');
 
   buttonGroup.appendChild(copyBtn);
   buttonGroup.appendChild(saveBtn);
@@ -1218,6 +1257,9 @@ function showImportModal(type = 'json') {
     textContent: 'Cancel',
     onClick: () => document.body.removeChild(modal),
   });
+
+  attachTooltip(importBtn, 'Import', 'Import data from file or pasted text');
+  attachTooltip(cancelBtn, 'Cancel', 'Close this dialog without importing');
 
   buttonGroup.appendChild(importBtn);
   buttonGroup.appendChild(cancelBtn);
@@ -1339,6 +1381,11 @@ function renderDuplicates(container, duplicateGroups) {
         trashGroupExcept(group, 'newest');
       },
     });
+    attachTooltip(
+      keepNewestBtn,
+      'Keep newest',
+      'Keep the most recent link and trash the rest'
+    );
 
     const keepOldestBtn = createEl('button', {
       className: 'container-action-btn',
@@ -1349,6 +1396,11 @@ function renderDuplicates(container, duplicateGroups) {
         trashGroupExcept(group, 'oldest');
       },
     });
+    attachTooltip(
+      keepOldestBtn,
+      'Keep oldest',
+      'Keep the oldest link and trash the rest'
+    );
 
     const trashAllBtn = createEl('button', {
       className: 'container-action-btn container-delete-btn',
@@ -1365,6 +1417,11 @@ function renderDuplicates(container, duplicateGroups) {
         render();
       },
     });
+    attachTooltip(
+      trashAllBtn,
+      'Trash all',
+      'Send all duplicates in this group to Trash'
+    );
 
     headerActions.appendChild(keepNewestBtn);
     headerActions.appendChild(keepOldestBtn);
@@ -1436,6 +1493,7 @@ function renderDuplicates(container, duplicateGroups) {
             }
           },
         });
+        attachTooltip(trashBtn, 'Trash link', 'Send this duplicate to Trash');
 
         actions.appendChild(trashBtn);
         linkRow.appendChild(favicon);
@@ -1508,6 +1566,21 @@ function render() {
     onClick: () => chrome.tabs.create({ url: 'settings.html' }),
     title: 'Open settings',
   });
+
+  attachTooltip(
+    linksViewBtn,
+    'Saved Links',
+    'Show your saved tabs and containers'
+  );
+  attachTooltip(
+    duplicatesBtn,
+    'Duplicates',
+    'Review and clean up duplicate URLs'
+  );
+  attachTooltip(exportBtn, 'Export', 'Download a JSON backup');
+  attachTooltip(importJsonBtn, 'Import JSON', 'Import a LaterList JSON backup');
+  attachTooltip(importOnetabBtn, 'Import OneTab', 'Import a OneTab export');
+  attachTooltip(settingsBtn, 'Settings', 'Open LaterList settings');
 
   toolsDiv.appendChild(linksViewBtn);
   toolsDiv.appendChild(duplicatesBtn);

@@ -10,6 +10,45 @@ let state = {
   aggressiveNormalization: false,
 };
 
+const dragHoverSwitch = {
+  isDragging: false,
+  timer: null,
+  targetTabId: null,
+  highlightEl: null,
+};
+
+function setDragHoverActive(isActive) {
+  dragHoverSwitch.isDragging = isActive;
+  if (!isActive) clearTabHoverSwitch();
+}
+
+function clearTabHoverSwitch() {
+  if (dragHoverSwitch.timer) {
+    clearTimeout(dragHoverSwitch.timer);
+    dragHoverSwitch.timer = null;
+  }
+  if (dragHoverSwitch.highlightEl) {
+    dragHoverSwitch.highlightEl.classList.remove('tab-hover-switch');
+    dragHoverSwitch.highlightEl = null;
+  }
+  dragHoverSwitch.targetTabId = null;
+}
+
+function scheduleTabHoverSwitch(tabId, tabEl) {
+  if (!dragHoverSwitch.isDragging) return;
+  if (state.activeTabId === tabId) return;
+  if (dragHoverSwitch.targetTabId === tabId) return;
+
+  clearTabHoverSwitch();
+  dragHoverSwitch.targetTabId = tabId;
+  dragHoverSwitch.highlightEl = tabEl;
+  tabEl.classList.add('tab-hover-switch');
+  dragHoverSwitch.timer = setTimeout(() => {
+    setActiveTab(tabId);
+    clearTabHoverSwitch();
+  }, 320);
+}
+
 const id = prefix =>
   `${prefix}-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
 
@@ -531,6 +570,15 @@ function renderTabs(container) {
         setActiveTab(tab.id);
       },
     });
+
+    tabEl.dataset.tabId = tab.id;
+
+    const handleTabDragHover = () => scheduleTabHoverSwitch(tab.id, tabEl);
+    const handleTabDragLeave = () => clearTabHoverSwitch();
+    tabEl.addEventListener('dragover', handleTabDragHover);
+    tabEl.addEventListener('pointerenter', handleTabDragHover);
+    tabEl.addEventListener('dragleave', handleTabDragLeave);
+    tabEl.addEventListener('pointerleave', handleTabDragLeave);
 
     const tabName = createEl('span', {
       className: 'tab-name',
@@ -1629,22 +1677,29 @@ function initSortable(rootEl) {
     listEl._laterlistSortable = new Sortable(listEl, {
       group: { name: 'links', pull: true, put: true },
       animation: 150,
+      onStart: () => setDragHoverActive(true),
       onEnd: evt => {
-        const fromContainerId = evt.from.dataset.containerId;
-        const toContainerId = evt.to.dataset.containerId;
-        const fromTabId = evt.from.dataset.tabId;
-        const toTabId = evt.to.dataset.tabId;
-        const fromTab = state.data.tabs.find(t => t.id === fromTabId);
-        const toTab = state.data.tabs.find(t => t.id === toTabId);
-        const fromContainer = fromTab?.containers.find(
-          c => c.id === fromContainerId
-        );
-        const toContainer = toTab?.containers.find(c => c.id === toContainerId);
-        if (!fromContainer || !toContainer) return;
-        const [moved] = fromContainer.links.splice(evt.oldIndex, 1);
-        toContainer.links.splice(evt.newIndex, 0, moved);
-        persist();
-        render();
+        try {
+          const fromContainerId = evt.from.dataset.containerId;
+          const toContainerId = evt.to.dataset.containerId;
+          const fromTabId = evt.from.dataset.tabId;
+          const toTabId = evt.to.dataset.tabId;
+          const fromTab = state.data.tabs.find(t => t.id === fromTabId);
+          const toTab = state.data.tabs.find(t => t.id === toTabId);
+          const fromContainer = fromTab?.containers.find(
+            c => c.id === fromContainerId
+          );
+          const toContainer = toTab?.containers.find(
+            c => c.id === toContainerId
+          );
+          if (!fromContainer || !toContainer) return;
+          const [moved] = fromContainer.links.splice(evt.oldIndex, 1);
+          toContainer.links.splice(evt.newIndex, 0, moved);
+          persist();
+          render();
+        } finally {
+          setDragHoverActive(false);
+        }
       },
     });
   });
@@ -1660,16 +1715,21 @@ function initSortable(rootEl) {
       group: { name: 'containers', pull: true, put: true },
       animation: 150,
       handle: '.container-header',
+      onStart: () => setDragHoverActive(true),
       onEnd: evt => {
-        const fromTabId = evt.from.dataset.tabId;
-        const toTabId = evt.to.dataset.tabId;
-        const fromTab = state.data.tabs.find(t => t.id === fromTabId);
-        const toTab = state.data.tabs.find(t => t.id === toTabId);
-        if (!fromTab || !toTab) return;
-        const [moved] = fromTab.containers.splice(evt.oldIndex, 1);
-        toTab.containers.splice(evt.newIndex, 0, moved);
-        persist();
-        render();
+        try {
+          const fromTabId = evt.from.dataset.tabId;
+          const toTabId = evt.to.dataset.tabId;
+          const fromTab = state.data.tabs.find(t => t.id === fromTabId);
+          const toTab = state.data.tabs.find(t => t.id === toTabId);
+          if (!fromTab || !toTab) return;
+          const [moved] = fromTab.containers.splice(evt.oldIndex, 1);
+          toTab.containers.splice(evt.newIndex, 0, moved);
+          persist();
+          render();
+        } finally {
+          setDragHoverActive(false);
+        }
       },
     });
   });

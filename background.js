@@ -98,13 +98,12 @@ async function sendAllBrowserTabsToLaterList() {
     // Get the view.html URL to filter it out
     const viewUrl = chrome.runtime.getURL('view.html');
 
-    // Filter: exclude pinned tabs, view.html, and non-http(s) URLs
+    // Filter: exclude pinned tabs and view.html
     const tabsToSave = allBrowserTabs.filter(
       tab =>
         !tab.pinned &&
         !tab.url.includes('view.html') &&
-        !tab.url.startsWith(viewUrl) &&
-        (tab.url.startsWith('http://') || tab.url.startsWith('https://'))
+        !tab.url.startsWith(viewUrl)
     );
 
     if (tabsToSave.length === 0) {
@@ -164,6 +163,21 @@ async function sendAllBrowserTabsToLaterList() {
       } catch (err) {
         console.warn('Some tabs could not be closed:', err);
       }
+    }
+
+    // Open or activate view.html and reload it
+    try {
+      const viewTabs = await chrome.tabs.query({ url: viewUrl });
+      if (viewTabs.length > 0) {
+        // View tab exists, activate and reload it
+        await chrome.tabs.update(viewTabs[0].id, { active: true });
+        await chrome.tabs.reload(viewTabs[0].id);
+      } else {
+        // Open new view tab
+        await chrome.tabs.create({ url: 'view.html', active: true });
+      }
+    } catch (err) {
+      console.warn('Could not open/reload view.html:', err);
     }
 
     return {

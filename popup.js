@@ -171,6 +171,18 @@ async function sendAllTabs() {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
+    await updateLinkCount();
+  }
+
+  async function updateLinkCount() {
+    const response = await chrome.runtime.sendMessage({
+      type: 'laterlist:getData',
+    });
+
+    const data = response?.data;
+    const totalLinks = data?.links.filter(link => !link.inTrash).length || 0; // Assuming 'inTrash' is the property to check
+    document.getElementById('link-count').textContent = totalLinks;
+  }
   document.getElementById('open-view')?.addEventListener('click', () => {
     chrome.runtime.openOptionsPage();
   });

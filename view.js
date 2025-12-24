@@ -1872,7 +1872,25 @@ function render() {
   app.innerHTML = '';
 
   const header = createEl('div', { className: 'header' });
-  header.appendChild(createEl('h1', { textContent: 'LaterList' }));
+  const headerLeft = createEl('div', { className: 'header-left' });
+  const titleEl = createEl('h1', { textContent: 'LaterList' });
+
+  // Total links (excluding Trash)
+  const totalLinks = (state.data?.tabs || []).reduce((sum, tab) => {
+    return (
+      sum +
+      (tab.containers || []).reduce((acc, c) => acc + (c.links?.length || 0), 0)
+    );
+  }, 0);
+  const totalEl = createEl('span', {
+    className: 'total-links',
+    textContent: `Total: ${totalLinks}`,
+    title: 'Total saved links (excluding Trash)',
+  });
+
+  headerLeft.appendChild(titleEl);
+  headerLeft.appendChild(totalEl);
+  header.appendChild(headerLeft);
 
   // Import/Export buttons
   const toolsDiv = createEl('div', { className: 'header-tools' });

@@ -505,13 +505,17 @@ function renderActiveTab(container) {
         const linkRow = createEl('div', { className: 'trash-link' });
         const favicon = createEl('img', {
           className: 'link-favicon',
-          attrs: { 
-            src: `https://www.google.com/s2/favicons?sz=32&domain=${new URL(link.url).hostname}`,
+          attrs: {
+            src: `https://www.google.com/s2/favicons?sz=32&domain=${
+              new URL(link.url).hostname
+            }`,
             alt: '',
-            loading: 'lazy'
+            loading: 'lazy',
           },
         });
-        favicon.onerror = () => { favicon.style.display = 'none'; };
+        favicon.onerror = () => {
+          favicon.style.display = 'none';
+        };
         const anchor = createEl('a', {
           textContent: link.title,
           attrs: { href: link.url, target: '_blank' },
@@ -607,13 +611,17 @@ function renderActiveTab(container) {
       });
       const favicon = createEl('img', {
         className: 'link-favicon',
-        attrs: { 
-          src: `https://www.google.com/s2/favicons?sz=32&domain=${new URL(link.url).hostname}`,
+        attrs: {
+          src: `https://www.google.com/s2/favicons?sz=32&domain=${
+            new URL(link.url).hostname
+          }`,
           alt: '',
-          loading: 'lazy'
+          loading: 'lazy',
         },
       });
-      favicon.onerror = () => { favicon.style.display = 'none'; };
+      favicon.onerror = () => {
+        favicon.style.display = 'none';
+      };
       const anchor = createEl('a', {
         textContent: link.title,
         attrs: { href: link.url, target: '_blank' },

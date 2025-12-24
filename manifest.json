@@ -39,9 +39,7 @@
     "48": "icon.png"
   },
   "content_security_policy": {
-    "script-src": [
-      "'self'"
-    ]
+    "extension_pages": "script-src 'self'; object-src 'self'"
   },
   "web_accessible_resources": [
     {

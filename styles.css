@@ -1,14 +1,10 @@
 /* Styles for LaterList extension */
 body {
-  font-family: Arial, sans-serif;
-  background-color: #f4f4f4;
-  color: #333;
-}
-
-/* Popup panel layout */
-body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  background: linear-gradient(135deg, #0f1419 0%, #1a1f2e 100%);
+  color: #e6edf3;
   margin: 0;
-  min-width: 340px;
+  min-width: 360px;
 }
 
 #tabs-container {
@@ -36,17 +32,17 @@ button:hover {
 /* laterlist-popup (shared look with content.js mini popup) */
 .laterlist-popup {
   position: fixed;
-  background: linear-gradient(to bottom, #3b4252, #2e3440);
-  border: 1px solid #4c566a;
-  border-radius: 12px;
-  padding: 16px;
+  background: linear-gradient(135deg, #1a1f2e 0%, #252d3d 100%);
+  border: 1px solid #30363d;
+  border-radius: 16px;
+  padding: 20px;
   z-index: 2147483646;
-  color: #eceff4;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15), 0 2px 6px rgba(0, 0, 0, 0.1);
-  max-width: 340px;
+  color: #e6edf3;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 0 2px 8px rgba(0, 0, 0, 0.2);
+  max-width: 360px;
   width: 100%;
-  transition: opacity 0.18s ease-in-out;
+  transition: all 0.2s ease;
   opacity: 0;
 }
 
@@ -62,56 +58,89 @@ button:hover {
 
 .laterlist-popup__title {
   font-weight: 600;
-  font-size: 1.05em;
-  margin-bottom: 6px;
-  color: #eceff4;
+  font-size: 16px;
+  margin-bottom: 8px;
+  color: #e6edf3;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  background: linear-gradient(135deg, #6366f1 0%, #7c3aed 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .laterlist-popup__url {
-  font-size: 0.9em;
-  color: #88c0d0;
-  margin-bottom: 12px;
+  font-size: 12px;
+  color: #9198a1;
+  margin-bottom: 16px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  opacity: 0.9;
-}
-
-.laterlist-popup__select-wrapper {
-  display: grid;
-  gap: 10px;
-  margin-bottom: 12px;
+  padding: 6px 10px;
+  backgr2px;
+  margin-bottom: 16px;
 }
 
 .laterlist-popup__select {
   width: 100%;
-  padding: 8px 12px;
-  background: #4c566a;
-  border: 1px solid #6c7a96;
-  border-radius: 6px;
-  color: #eceff4;
-  font-size: 0.95em;
+  padding: 10px 14px;
+  background: #252d3d;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  color: #e6edf3;
+  font-size: 14px;
   cursor: pointer;
   outline: none;
+  transition: all 0.2s ease;
+  font-family: inherit;
 }
 
-.laterlist-popup__button-container {
-  display: flex;
-  gap: 8px;
+.laterl10px;
   justify-content: flex-end;
 }
 
 .laterlist-popup__button {
-  padding: 8px 14px;
-  border: none;
-  border-radius: 6px;
-  font-size: 0.95em;
+  padding: 10px 16px;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s ease;
+  background: #252d3d;
+  color: #e6edf3;
+  font-family: inherit;
+}
+
+.laterlist-popup__button:hover {
+  background: #2a3344;
+  border-color: #484f58;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.laterlist-popup__button:active {
+  transform: translateY(0);
+}
+
+.laterlist-popup__button--primary {
+  background: linear-gradient(135deg, #6366f1 0%, #7c3aed 100%);
+  border-color: #6366f1;
+  color: white;
+}
+
+.laterlist-popup__button--primary:hover {
+  background: linear-gradient(135deg, #7c3aed 0%, #8b5cf6 100%);
+  border-color: #7c3aed
+  font-size: 0.2px;
+  font-size: 13px;
+  min-height: 1.2em;
+  color: #9198a1;
+  padding: 8px;
+  background: rgba(99, 102, 241, 0.05);
+  border-radius: 6px;
+  text-align: centerall 0.2s ease;
   background: #434c5e;
   color: #e5e9f0;
 }

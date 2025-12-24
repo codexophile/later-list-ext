@@ -190,14 +190,12 @@ h1 {
 
 .tab-actions {
   margin-left: auto;
-  display: flex;
+  display: none;
   gap: 4px;
-  opacity: 0;
-  transition: opacity 0.2s ease;
 }
 
 .tab:hover .tab-actions {
-  opacity: 1;
+  display: flex;
 }
 
 .tab-action-btn {

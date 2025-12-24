@@ -230,7 +230,7 @@ h1 {
 
 .trash-tab {
   background-color: rgba(248, 81, 73, 0.1) !important;
-  border-color: var(--danger) !important;
+  /* border-color: var(--danger) !important; */
   color: var(--danger) !important;
 }
 

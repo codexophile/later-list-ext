@@ -537,11 +537,6 @@ function setActiveTab(tabId) {
   render();
 }
 
-function setViewMode(mode) {
-  state.viewMode = mode;
-  render();
-}
-
 function toggleBulkMode() {
   state.bulkMode = !state.bulkMode;
   if (!state.bulkMode) state.selectedLinks.clear();
@@ -850,7 +845,32 @@ function renderTabs(container) {
     textContent: state.data.trash?.length ?? 0,
   });
   trashEl.appendChild(trashCount);
-  tabsWrapper.appendChild(trashEl);
+
+  // Special tabs wrapper for right alignment
+  const specialTabsWrapper = createEl('div', { className: 'tabs-special' });
+
+  // Duplicates tab
+  const duplicateGroups = collectDuplicateGroups();
+  const duplicatesEl = createEl('div', {
+    className: `tab duplicates-tab${
+      state.activeTabId === 'duplicates' ? ' active' : ''
+    }`,
+    onClick: () => setActiveTab('duplicates'),
+  });
+  const duplicatesLabel = createEl('span', {
+    className: 'tab-name',
+    textContent: 'Duplicates',
+  });
+  const duplicatesCount = createEl('span', {
+    className: 'tab-count',
+    textContent: duplicateGroups.length,
+  });
+  duplicatesEl.appendChild(duplicatesLabel);
+  duplicatesEl.appendChild(duplicatesCount);
+  specialTabsWrapper.appendChild(duplicatesEl);
+  specialTabsWrapper.appendChild(trashEl);
+
+  tabsWrapper.appendChild(specialTabsWrapper);
 
   const addTabBtn = createEl('button', {
     className: 'btn btn-primary',
@@ -1895,21 +1915,6 @@ function render() {
   // Import/Export buttons
   const toolsDiv = createEl('div', { className: 'header-tools' });
 
-  const linksViewBtn = createEl('button', {
-    className:
-      state.viewMode === 'links' ? 'btn btn-primary' : 'btn btn-secondary',
-    textContent: 'Saved Links',
-    onClick: () => setViewMode('links'),
-  });
-
-  const duplicatesBtn = createEl('button', {
-    className:
-      state.viewMode === 'duplicates' ? 'btn btn-primary' : 'btn btn-secondary',
-    textContent: `Duplicates (${duplicateGroups.length})`,
-    onClick: () => setViewMode('duplicates'),
-    title: 'Review duplicate URLs',
-  });
-
   const exportBtn = createEl('button', {
     className: 'btn btn-primary',
     textContent: '⬇ Export',
@@ -1970,16 +1975,6 @@ function render() {
     btn.disabled = !state.bulkMode || state.selectedLinks.size === 0;
   });
 
-  attachTooltip(
-    linksViewBtn,
-    'Saved Links',
-    'Show your saved tabs and containers'
-  );
-  attachTooltip(
-    duplicatesBtn,
-    'Duplicates',
-    'Review and clean up duplicate URLs'
-  );
   attachTooltip(exportBtn, 'Export', 'Download a JSON backup');
   attachTooltip(importJsonBtn, 'Import JSON', 'Import a LaterList JSON backup');
   attachTooltip(importOnetabBtn, 'Import OneTab', 'Import a OneTab export');
@@ -1997,8 +1992,6 @@ function render() {
   attachTooltip(bulkTrashBtn, 'Trash selected', 'Move selected links to Trash');
   attachTooltip(bulkClearBtn, 'Clear selection', 'Clear the current selection');
 
-  toolsDiv.appendChild(linksViewBtn);
-  toolsDiv.appendChild(duplicatesBtn);
   toolsDiv.appendChild(exportBtn);
   toolsDiv.appendChild(importJsonBtn);
   toolsDiv.appendChild(importOnetabBtn);
@@ -2016,7 +2009,7 @@ function render() {
   app.appendChild(tabsContainer);
 
   const activeArea = createEl('div');
-  if (state.viewMode === 'duplicates') {
+  if (state.activeTabId === 'duplicates') {
     renderDuplicates(activeArea, duplicateGroups);
   } else {
     renderActiveTab(activeArea);

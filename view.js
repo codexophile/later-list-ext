@@ -699,7 +699,11 @@ function renderActiveTab(container) {
 
 function exportToJSON() {
   const json = JSON.stringify(state.data, null, 2);
-  const blob = new Blob([json], { type: 'application/json' });
+  showExportModal(json);
+}
+
+function downloadJSON(jsonText) {
+  const blob = new Blob([jsonText], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -711,92 +715,263 @@ function exportToJSON() {
 function importFromJSON(file) {
   const reader = new FileReader();
   reader.onload = e => {
-    try {
-      const imported = JSON.parse(e.target.result);
-      if (!imported.tabs || !Array.isArray(imported.tabs)) {
-        alert('Invalid LaterList JSON format');
-        return;
-      }
-      if (
-        !confirm(
-          'Merge imported data with existing data? (Cancel to replace all)'
-        )
-      ) {
-        state.data = imported;
-      } else {
-        state.data.tabs.push(...imported.tabs);
-        state.data.trash = state.data.trash || [];
-        if (imported.trash) state.data.trash.push(...imported.trash);
-      }
-
-      // Imported backups (especially from older userscripts) may be missing ids
-      // or contain duplicate ids. Repair them to prevent tab collisions.
-      migrateAndFixData(state.data);
-      state.activeTabId = state.data.tabs[0]?.id || 'trash';
-
-      persist();
-      render();
-    } catch (err) {
-      alert('Error parsing JSON: ' + err.message);
-    }
+    processJSONImport(e.target.result);
   };
   reader.readAsText(file);
+}
+
+function processJSONImport(jsonText) {
+  try {
+    const imported = JSON.parse(jsonText);
+    if (!imported.tabs || !Array.isArray(imported.tabs)) {
+      alert('Invalid LaterList JSON format');
+      return;
+    }
+    if (
+      !confirm(
+        'Merge imported data with existing data? (Cancel to replace all)'
+      )
+    ) {
+      state.data = imported;
+    } else {
+      state.data.tabs.push(...imported.tabs);
+      state.data.trash = state.data.trash || [];
+      if (imported.trash) state.data.trash.push(...imported.trash);
+    }
+
+    // Imported backups (especially from older userscripts) may be missing ids
+    // or contain duplicate ids. Repair them to prevent tab collisions.
+    migrateAndFixData(state.data);
+    state.activeTabId = state.data.tabs[0]?.id || 'trash';
+
+    persist();
+    render();
+  } catch (err) {
+    alert('Error parsing JSON: ' + err.message);
+  }
 }
 
 function importFromOneTab(file) {
   const reader = new FileReader();
   reader.onload = e => {
-    try {
-      const text = e.target.result;
-      const lines = text.trim().split('\n');
-      const firstTab = state.data.tabs[0] || {
-        id: id('tab'),
-        name: 'Imported',
-        containers: [],
-      };
-      const container = firstTab.containers[0] || {
-        id: id('container'),
-        name: 'Imported',
-        links: [],
-      };
-
-      lines.forEach(line => {
-        const trimmed = line.trim();
-        if (
-          !trimmed ||
-          trimmed.startsWith('http://localhost') ||
-          trimmed === '(Archived)'
-        )
-          return;
-
-        try {
-          const url = new URL(trimmed);
-          const title = url.hostname || url.toString();
-          container.links.push({ id: id('link'), title, url: url.toString() });
-        } catch {
-          // Skip invalid URLs
-        }
-      });
-
-      if (!firstTab.id) {
-        firstTab.id = id('tab');
-        state.data.tabs.push(firstTab);
-      }
-      if (!container.id) {
-        container.id = id('container');
-        firstTab.containers.push(container);
-      }
-
-      migrateAndFixData(state.data);
-
-      persist();
-      render();
-      alert(`Imported ${container.links.length} links`);
-    } catch (err) {
-      alert('Error importing OneTab format: ' + err.message);
-    }
+    processOneTabImport(e.target.result);
   };
   reader.readAsText(file);
+}
+
+function processOneTabImport(text) {
+  try {
+    const lines = text.trim().split('\n');
+    const firstTab = state.data.tabs[0] || {
+      id: id('tab'),
+      name: 'Imported',
+      containers: [],
+    };
+    const container = firstTab.containers[0] || {
+      id: id('container'),
+      name: 'Imported',
+      links: [],
+    };
+
+    lines.forEach(line => {
+      const trimmed = line.trim();
+      if (
+        !trimmed ||
+        trimmed.startsWith('http://localhost') ||
+        trimmed === '(Archived)'
+      )
+        return;
+
+      try {
+        const url = new URL(trimmed);
+        const title = url.hostname || url.toString();
+        container.links.push({ id: id('link'), title, url: url.toString() });
+      } catch {
+        // Skip invalid URLs
+      }
+    });
+
+    if (!firstTab.id) {
+      firstTab.id = id('tab');
+      state.data.tabs.push(firstTab);
+    }
+    if (!container.id) {
+      container.id = id('container');
+      firstTab.containers.push(container);
+    }
+
+    migrateAndFixData(state.data);
+
+    persist();
+    render();
+    alert(`Imported ${container.links.length} links`);
+  } catch (err) {
+    alert('Error importing OneTab format: ' + err.message);
+  }
+}
+
+function showExportModal(jsonText) {
+  const modal = createEl('div', { className: 'modal-overlay' });
+  const modalContent = createEl('div', {
+    className: 'modal-content export-modal',
+  });
+
+  const title = createEl('h2', { textContent: 'Export LaterList Data' });
+  const description = createEl('p', {
+    textContent: 'Copy the backup text below or save it as a file:',
+    className: 'modal-description',
+  });
+
+  const textarea = createEl('textarea', {
+    className: 'export-textarea',
+    value: jsonText,
+    readOnly: true,
+  });
+
+  const buttonGroup = createEl('div', { className: 'modal-button-group' });
+
+  const copyBtn = createEl('button', {
+    className: 'btn btn-primary',
+    textContent: '📋 Copy to Clipboard',
+    onClick: () => {
+      textarea.select();
+      navigator.clipboard.writeText(jsonText).then(() => {
+        copyBtn.textContent = '✓ Copied!';
+        setTimeout(() => {
+          copyBtn.textContent = '📋 Copy to Clipboard';
+        }, 2000);
+      });
+    },
+  });
+
+  const saveBtn = createEl('button', {
+    className: 'btn btn-primary',
+    textContent: '💾 Save as File',
+    onClick: () => {
+      downloadJSON(jsonText);
+      document.body.removeChild(modal);
+    },
+  });
+
+  const closeBtn = createEl('button', {
+    className: 'btn btn-secondary',
+    textContent: 'Close',
+    onClick: () => document.body.removeChild(modal),
+  });
+
+  buttonGroup.appendChild(copyBtn);
+  buttonGroup.appendChild(saveBtn);
+  buttonGroup.appendChild(closeBtn);
+
+  modalContent.appendChild(title);
+  modalContent.appendChild(description);
+  modalContent.appendChild(textarea);
+  modalContent.appendChild(buttonGroup);
+  modal.appendChild(modalContent);
+
+  modal.addEventListener('click', e => {
+    if (e.target === modal) document.body.removeChild(modal);
+  });
+
+  document.body.appendChild(modal);
+  textarea.select();
+}
+
+function showImportModal(type = 'json') {
+  const modal = createEl('div', { className: 'modal-overlay' });
+  const modalContent = createEl('div', {
+    className: 'modal-content import-modal',
+  });
+
+  const title = createEl('h2', {
+    textContent:
+      type === 'json' ? 'Import LaterList Data' : 'Import from OneTab',
+  });
+  const description = createEl('p', {
+    textContent: 'Choose a file or paste the backup text:',
+    className: 'modal-description',
+  });
+
+  const fileInputGroup = createEl('div', { className: 'import-option-group' });
+  const fileLabel = createEl('label', {
+    textContent: '📁 Choose File:',
+    className: 'import-label',
+  });
+  const fileInput = document.createElement('input');
+  fileInput.type = 'file';
+  fileInput.accept = type === 'json' ? '.json' : '.txt';
+  fileInput.className = 'import-file-input';
+  fileInputGroup.appendChild(fileLabel);
+  fileInputGroup.appendChild(fileInput);
+
+  const divider = createEl('div', {
+    className: 'import-divider',
+    textContent: 'OR',
+  });
+
+  const textareaGroup = createEl('div', { className: 'import-option-group' });
+  const textareaLabel = createEl('label', {
+    textContent: '📝 Paste Text:',
+    className: 'import-label',
+  });
+  const textarea = createEl('textarea', {
+    className: 'import-textarea',
+    placeholder:
+      type === 'json'
+        ? 'Paste your LaterList JSON backup here...'
+        : 'Paste your OneTab URLs here (one per line)...',
+  });
+  textareaGroup.appendChild(textareaLabel);
+  textareaGroup.appendChild(textarea);
+
+  const buttonGroup = createEl('div', { className: 'modal-button-group' });
+
+  const importBtn = createEl('button', {
+    className: 'btn btn-primary',
+    textContent: '⬆ Import',
+    onClick: () => {
+      if (fileInput.files[0]) {
+        if (type === 'json') {
+          importFromJSON(fileInput.files[0]);
+        } else {
+          importFromOneTab(fileInput.files[0]);
+        }
+        document.body.removeChild(modal);
+      } else if (textarea.value.trim()) {
+        if (type === 'json') {
+          processJSONImport(textarea.value);
+        } else {
+          processOneTabImport(textarea.value);
+        }
+        document.body.removeChild(modal);
+      } else {
+        alert('Please select a file or paste text to import');
+      }
+    },
+  });
+
+  const cancelBtn = createEl('button', {
+    className: 'btn btn-secondary',
+    textContent: 'Cancel',
+    onClick: () => document.body.removeChild(modal),
+  });
+
+  buttonGroup.appendChild(importBtn);
+  buttonGroup.appendChild(cancelBtn);
+
+  modalContent.appendChild(title);
+  modalContent.appendChild(description);
+  modalContent.appendChild(fileInputGroup);
+  modalContent.appendChild(divider);
+  modalContent.appendChild(textareaGroup);
+  modalContent.appendChild(buttonGroup);
+  modal.appendChild(modalContent);
+
+  modal.addEventListener('click', e => {
+    if (e.target === modal) document.body.removeChild(modal);
+  });
+
+  document.body.appendChild(modal);
 }
 
 function render() {
@@ -816,38 +991,20 @@ function render() {
     className: 'btn btn-primary',
     textContent: '⬇ Export',
     onClick: exportToJSON,
-    title: 'Download backup as JSON',
-  });
-
-  const importJsonInput = document.createElement('input');
-  importJsonInput.type = 'file';
-  importJsonInput.accept = '.json';
-  importJsonInput.style.display = 'none';
-  importJsonInput.addEventListener('change', e => {
-    if (e.target.files[0]) importFromJSON(e.target.files[0]);
-    e.target.value = '';
+    title: 'Export backup as JSON',
   });
 
   const importJsonBtn = createEl('button', {
     className: 'btn btn-primary',
     textContent: '⬆ Import JSON',
-    onClick: () => importJsonInput.click(),
-    title: 'Restore from JSON backup',
-  });
-
-  const importOnetabInput = document.createElement('input');
-  importOnetabInput.type = 'file';
-  importOnetabInput.accept = '.txt';
-  importOnetabInput.style.display = 'none';
-  importOnetabInput.addEventListener('change', e => {
-    if (e.target.files[0]) importFromOneTab(e.target.files[0]);
-    e.target.value = '';
+    onClick: () => showImportModal('json'),
+    title: 'Import from JSON backup',
   });
 
   const importOnetabBtn = createEl('button', {
     className: 'btn btn-secondary',
     textContent: '⬆ Import OneTab',
-    onClick: () => importOnetabInput.click(),
+    onClick: () => showImportModal('onetab'),
     title: 'Import from OneTab text format',
   });
 
@@ -862,8 +1019,6 @@ function render() {
   toolsDiv.appendChild(importJsonBtn);
   toolsDiv.appendChild(importOnetabBtn);
   toolsDiv.appendChild(settingsBtn);
-  toolsDiv.appendChild(importJsonInput);
-  toolsDiv.appendChild(importOnetabInput);
   header.appendChild(toolsDiv);
 
   app.appendChild(header);

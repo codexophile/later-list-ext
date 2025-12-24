@@ -130,7 +130,7 @@ h1 {
 }
 
 .tab {
-  padding: 10px 18px;
+  padding: 5px 10px;
   background: var(--bg-tertiary);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -238,7 +238,7 @@ h1 {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px;
+  padding: 10px;
   border-bottom: 1px solid var(--border);
   backdrop-filter: blur(10px);
   z-index: 10;

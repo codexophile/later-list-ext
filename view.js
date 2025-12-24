@@ -278,8 +278,9 @@ function normalizeUrl(url) {
 
     const path = u.pathname.replace(/\/+$/, '');
     const query = params.toString();
+    const hash = u.hash;
     const base = `${u.protocol}//${u.host}${path || '/'}`;
-    return (query ? `${base}?${query}` : base).toLowerCase();
+    return (query ? `${base}?${query}${hash}` : `${base}${hash}`).toLowerCase();
   } catch {
     return url.toLowerCase().trim();
   }

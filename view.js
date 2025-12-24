@@ -81,6 +81,73 @@ function formatRelativeTime(timestamp) {
   return 'Just now';
 }
 
+let statusOverlay = null;
+
+function createStatusOverlay() {
+  if (statusOverlay) return statusOverlay;
+
+  statusOverlay = createEl('div', { className: 'status-overlay' });
+  statusOverlay.style.display = 'none';
+  document.body.appendChild(statusOverlay);
+  return statusOverlay;
+}
+
+function showStatusOverlay(linkData) {
+  const overlay = createStatusOverlay();
+
+  let content = `<div class="status-overlay-title">${linkData.title}</div>`;
+  content += `<div class="status-overlay-section">`;
+  content += `<div class="status-overlay-label">URL</div>`;
+  content += `<div class="status-overlay-value">${linkData.url}</div>`;
+  content += `</div>`;
+
+  if (linkData.savedAt) {
+    content += `<div class="status-overlay-section">`;
+    content += `<div class="status-overlay-label">Added</div>`;
+    content += `<div class="status-overlay-value">${formatDate(
+      linkData.savedAt
+    )}</div>`;
+    content += `<div class="status-overlay-relative">${formatRelativeTime(
+      linkData.savedAt
+    )}</div>`;
+    content += `</div>`;
+  }
+
+  if (linkData.deletedAt) {
+    content += `<div class="status-overlay-section">`;
+    content += `<div class="status-overlay-label">Deleted</div>`;
+    content += `<div class="status-overlay-value">${formatDate(
+      linkData.deletedAt
+    )}</div>`;
+    content += `<div class="status-overlay-relative">${formatRelativeTime(
+      linkData.deletedAt
+    )}</div>`;
+    content += `</div>`;
+  }
+
+  if (linkData.tabName) {
+    content += `<div class="status-overlay-section">`;
+    content += `<div class="status-overlay-label">Location</div>`;
+    content += `<div class="status-overlay-value">${linkData.tabName} › ${linkData.containerName}</div>`;
+    content += `</div>`;
+  }
+
+  if (linkData.locked) {
+    content += `<div class="status-overlay-section">`;
+    content += `<div class="status-overlay-badge locked">🔒 Locked</div>`;
+    content += `</div>`;
+  }
+
+  overlay.innerHTML = content;
+  overlay.style.display = 'block';
+}
+
+function hideStatusOverlay() {
+  if (statusOverlay) {
+    statusOverlay.style.display = 'none';
+  }
+}
+
 function ensureArray(value) {
   return Array.isArray(value) ? value : [];
 }
@@ -932,19 +999,22 @@ function renderActiveTab(container) {
           chrome.tabs.create({ url: link.url, active: false });
         });
 
-        const tooltip = createEl('div', { className: 'link-tooltip' });
-        const tooltipContent = [
-          `<strong>URL:</strong> ${link.url}`,
-          `<strong>Added:</strong> ${formatDate(
-            link.savedAt
-          )} (${formatRelativeTime(link.savedAt)})`,
-          `<strong>Deleted:</strong> ${formatDate(
-            link.deletedAt
-          )} (${formatRelativeTime(link.deletedAt)})`,
-        ].join('<br>');
-        tooltip.innerHTML = tooltipContent;
-
         linkInfo.appendChild(anchor);
+
+        // Add hover events for status overlay
+        linkRow.addEventListener('mouseenter', () => {
+          showStatusOverlay({
+            title: link.title,
+            url: link.url,
+            savedAt: link.savedAt,
+            deletedAt: link.deletedAt,
+            type: 'trash',
+          });
+        });
+        linkRow.addEventListener('mouseleave', () => {
+          hideStatusOverlay();
+        });
+
         const actions = createEl('div', { className: 'trash-actions' });
         const restoreBtn = createEl('button', {
           className: 'btn btn-restore',
@@ -970,7 +1040,6 @@ function renderActiveTab(container) {
         actions.appendChild(deleteBtn);
         linkRow.appendChild(favicon);
         linkRow.appendChild(linkInfo);
-        linkRow.appendChild(tooltip);
         linkRow.appendChild(actions);
         trashContainer.appendChild(linkRow);
       });
@@ -1144,16 +1213,21 @@ function renderActiveTab(container) {
         handleOpenLink(link.url, tab.id, containerData.id, link.id);
       });
 
-      const tooltip = createEl('div', { className: 'link-tooltip' });
-      const tooltipContent = [
-        `<strong>URL:</strong> ${link.url}`,
-        `<strong>Added:</strong> ${formatDate(
-          link.savedAt
-        )} (${formatRelativeTime(link.savedAt)})`,
-      ].join('<br>');
-      tooltip.innerHTML = tooltipContent;
-
       linkInfo.appendChild(anchor);
+
+      // Add hover events for status overlay
+      linkRow.addEventListener('mouseenter', () => {
+        showStatusOverlay({
+          title: link.title,
+          url: link.url,
+          savedAt: link.savedAt,
+          locked: link.locked,
+          type: 'regular',
+        });
+      });
+      linkRow.addEventListener('mouseleave', () => {
+        hideStatusOverlay();
+      });
 
       anchor.addEventListener('dblclick', e => {
         e.preventDefault();
@@ -1190,7 +1264,6 @@ function renderActiveTab(container) {
       actions.appendChild(deleteBtn);
       linkRow.appendChild(favicon);
       linkRow.appendChild(linkInfo);
-      linkRow.appendChild(tooltip);
       linkRow.appendChild(actions);
 
       // Add visual indicator for locked links
@@ -1741,18 +1814,22 @@ function renderDuplicates(container, duplicateGroups) {
           chrome.tabs.create({ url: linkRef.url, active: false });
         });
 
-        const tooltip = createEl('div', { className: 'link-tooltip' });
-        const tooltipContent = [
-          `<strong>Tab:</strong> ${linkRef.tabName}`,
-          `<strong>Container:</strong> ${linkRef.containerName}`,
-          `<strong>URL:</strong> ${linkRef.url}`,
-          `<strong>Added:</strong> ${formatDate(
-            linkRef.savedAt
-          )} (${formatRelativeTime(linkRef.savedAt)})`,
-        ].join('<br>');
-        tooltip.innerHTML = tooltipContent;
-
         linkInfo.appendChild(anchor);
+
+        // Add hover events for status overlay
+        linkRow.addEventListener('mouseenter', () => {
+          showStatusOverlay({
+            title: linkRef.title,
+            url: linkRef.url,
+            savedAt: linkRef.savedAt,
+            tabName: linkRef.tabName,
+            containerName: linkRef.containerName,
+            type: 'duplicate',
+          });
+        });
+        linkRow.addEventListener('mouseleave', () => {
+          hideStatusOverlay();
+        });
 
         const actions = createEl('div', { className: 'container-actions' });
         const trashBtn = createEl('button', {
@@ -1775,7 +1852,6 @@ function renderDuplicates(container, duplicateGroups) {
         actions.appendChild(trashBtn);
         linkRow.appendChild(favicon);
         linkRow.appendChild(linkInfo);
-        linkRow.appendChild(tooltip);
         linkRow.appendChild(actions);
         content.appendChild(linkRow);
       });

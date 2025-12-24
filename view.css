@@ -335,10 +335,23 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  flex: 1;
 }
 
 .link a:hover {
   text-decoration: underline;
+}
+
+.link-favicon {
+  width: 20px;
+  height: 20px;
+  margin-right: 10px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  object-fit: contain;
+  background: var(--bg-secondary);
+  padding: 2px;
+  box-sizing: border-box;
 }
 
 .container-actions {

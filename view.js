@@ -503,6 +503,15 @@ function renderActiveTab(container) {
     } else {
       state.data.trash.forEach(link => {
         const linkRow = createEl('div', { className: 'trash-link' });
+        const favicon = createEl('img', {
+          className: 'link-favicon',
+          attrs: { 
+            src: `https://www.google.com/s2/favicons?sz=32&domain=${new URL(link.url).hostname}`,
+            alt: '',
+            loading: 'lazy'
+          },
+        });
+        favicon.onerror = () => { favicon.style.display = 'none'; };
         const anchor = createEl('a', {
           textContent: link.title,
           attrs: { href: link.url, target: '_blank' },
@@ -529,6 +538,7 @@ function renderActiveTab(container) {
         });
         actions.appendChild(restoreBtn);
         actions.appendChild(deleteBtn);
+        linkRow.appendChild(favicon);
         linkRow.appendChild(anchor);
         linkRow.appendChild(actions);
         trashContainer.appendChild(linkRow);
@@ -595,6 +605,15 @@ function renderActiveTab(container) {
       const linkRow = createEl('div', {
         className: isDuplicate ? 'link duplicate-link' : 'link',
       });
+      const favicon = createEl('img', {
+        className: 'link-favicon',
+        attrs: { 
+          src: `https://www.google.com/s2/favicons?sz=32&domain=${new URL(link.url).hostname}`,
+          alt: '',
+          loading: 'lazy'
+        },
+      });
+      favicon.onerror = () => { favicon.style.display = 'none'; };
       const anchor = createEl('a', {
         textContent: link.title,
         attrs: { href: link.url, target: '_blank' },
@@ -620,6 +639,7 @@ function renderActiveTab(container) {
         onClick: () => deleteLink(tab.id, containerData.id, link.id),
       });
       actions.appendChild(deleteBtn);
+      linkRow.appendChild(favicon);
       linkRow.appendChild(anchor);
       linkRow.appendChild(actions);
       content.appendChild(linkRow);

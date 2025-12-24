@@ -327,7 +327,7 @@ function setActiveTab(tabId) {
 function createEl(tag, opts = {}) {
   const el = document.createElement(tag);
   if (opts.className) el.className = opts.className;
-  if (opts.textContent) el.textContent = opts.textContent;
+  if (opts.textContent !== undefined) el.textContent = opts.textContent;
   if (opts.html) el.innerHTML = opts.html;
   if (opts.attrs)
     Object.entries(opts.attrs).forEach(([k, v]) => el.setAttribute(k, v));

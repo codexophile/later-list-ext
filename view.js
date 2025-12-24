@@ -160,6 +160,7 @@ function migrateAndFixData(data) {
   });
 
   // Trash links
+  data.trash.sort((a, b) => b.savedAt - a.savedAt);
   data.trash.forEach((link, linkIndex) => {
     if (!link || typeof link !== 'object') {
       data.trash[linkIndex] = { id: id('link'), title: 'Link', url: '' };
@@ -322,7 +323,10 @@ function deleteTab(tabId) {
   const tab = state.data.tabs.find(t => t.id === tabId);
   if (!tab) return;
   if (!confirm('Delete tab and send its links to trash?')) return;
-  tab.containers.forEach(c => state.data.trash.push(...c.links));
+  tab.containers.forEach(c => {
+    c.links.forEach(link => (link.deletedAt = Date.now()));
+    state.data.trash.push(...c.links);
+  });
   state.data.tabs = state.data.tabs.filter(t => t.id !== tabId);
   state.activeTabId = state.data.tabs[0]?.id || 'trash';
   persist();
@@ -345,6 +349,7 @@ function deleteContainer(tabId, containerId) {
   const container = tab.containers.find(c => c.id === containerId);
   if (!container) return;
   if (!confirm('Delete container and send its links to trash?')) return;
+  container.links.forEach(link => (link.deletedAt = Date.now()));
   state.data.trash.push(...container.links);
   tab.containers = tab.containers.filter(c => c.id !== containerId);
   persist();
@@ -597,6 +602,7 @@ function deleteLink(tabId, containerId, linkId) {
   const linkIndex = container.links.findIndex(l => l.id === linkId);
   if (linkIndex === -1) return;
   const [removed] = container.links.splice(linkIndex, 1);
+  removed.deletedAt = Date.now();
   state.data.trash = state.data.trash || [];
   state.data.trash.push(removed);
   persist();
@@ -610,6 +616,7 @@ function moveLinkToTrash(tabId, containerId, linkId) {
   const linkIndex = container.links.findIndex(l => l.id === linkId);
   if (linkIndex === -1) return null;
   const [removed] = container.links.splice(linkIndex, 1);
+  removed.deletedAt = Date.now();
   state.data.trash = state.data.trash || [];
   state.data.trash.push(removed);
   return removed;
@@ -640,7 +647,11 @@ function renderActiveTab(container) {
     if (!state.data.trash?.length) {
       trashContainer.textContent = 'Trash is empty';
     } else {
-      state.data.trash.forEach(link => {
+      // Sort trash links by deletedAt in descending order (most recent first)
+      const sortedTrash = [...state.data.trash].sort(
+        (a, b) => (b.deletedAt || 0) - (a.deletedAt || 0)
+      );
+      sortedTrash.forEach(link => {
         const linkRow = createEl('div', { className: 'trash-link' });
         const favicon = createEl('img', {
           className: 'link-favicon',

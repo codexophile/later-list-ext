@@ -1627,7 +1627,7 @@ function initSortable(rootEl) {
     }
 
     listEl._laterlistSortable = new Sortable(listEl, {
-      group: 'links',
+      group: { name: 'links', pull: true, put: true },
       animation: 150,
       onEnd: evt => {
         const fromContainerId = evt.from.dataset.containerId;
@@ -1657,7 +1657,7 @@ function initSortable(rootEl) {
     }
 
     listEl._laterlistSortable = new Sortable(listEl, {
-      group: 'containers',
+      group: { name: 'containers', pull: true, put: true },
       animation: 150,
       handle: '.container-header',
       onEnd: evt => {

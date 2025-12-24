@@ -412,6 +412,7 @@ h1 {
 .link-info-wrapper {
   position: relative;
   flex: 1;
+  overflow: hidden;
   display: flex;
   align-items: center;
 }
@@ -444,7 +445,8 @@ h1 {
   pointer-events: none;
 }
 
-.link-info-wrapper:hover .link-tooltip {
+.link:hover .link-tooltip,
+.trash-link:hover .link-tooltip {
   visibility: visible;
   opacity: 1;
 }
@@ -679,6 +681,7 @@ h1 {
 }
 
 .trash-link {
+  position: relative;
   padding: 12px 14px;
   margin-bottom: 8px;
   background: var(--bg-tertiary);

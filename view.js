@@ -716,7 +716,6 @@ function renderActiveTab(container) {
         tooltip.innerHTML = tooltipContent;
 
         linkInfo.appendChild(anchor);
-        linkInfo.appendChild(tooltip);
         const actions = createEl('div', { className: 'trash-actions' });
         const restoreBtn = createEl('button', {
           className: 'btn btn-restore',
@@ -736,6 +735,7 @@ function renderActiveTab(container) {
         actions.appendChild(deleteBtn);
         linkRow.appendChild(favicon);
         linkRow.appendChild(linkInfo);
+        linkRow.appendChild(tooltip);
         linkRow.appendChild(actions);
         trashContainer.appendChild(linkRow);
       });
@@ -844,7 +844,6 @@ function renderActiveTab(container) {
       tooltip.innerHTML = tooltipContent;
 
       linkInfo.appendChild(anchor);
-      linkInfo.appendChild(tooltip);
 
       anchor.addEventListener('dblclick', e => {
         e.preventDefault();
@@ -864,6 +863,7 @@ function renderActiveTab(container) {
       actions.appendChild(deleteBtn);
       linkRow.appendChild(favicon);
       linkRow.appendChild(linkInfo);
+      linkRow.appendChild(tooltip);
       linkRow.appendChild(actions);
       content.appendChild(linkRow);
     });

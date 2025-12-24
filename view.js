@@ -828,7 +828,26 @@ function archiveLink(tabId, containerId, linkId) {
 function handleOpenLink(url, tabId, containerId, linkId) {
   chrome.tabs.create({ url, active: false });
   if (tabId && containerId && linkId) {
-    deleteLink(tabId, containerId, linkId);
+    const link = getLinkById(tabId, containerId, linkId);
+    // Only delete if the link is not locked
+    if (link && !link.locked) {
+      deleteLink(tabId, containerId, linkId);
+    }
+  }
+}
+
+function getLinkById(tabId, containerId, linkId) {
+  const tab = state.data.tabs.find(t => t.id === tabId);
+  const container = tab?.containers.find(c => c.id === containerId);
+  return container?.links.find(l => l.id === linkId);
+}
+
+function toggleLockLink(tabId, containerId, linkId) {
+  const link = getLinkById(tabId, containerId, linkId);
+  if (link) {
+    link.locked = !link.locked;
+    persist();
+    render();
   }
 }
 
@@ -1146,6 +1165,22 @@ function renderActiveTab(container) {
         }
       });
       const actions = createEl('div', { className: 'container-actions' });
+
+      // Lock button
+      const lockBtn = createEl('button', {
+        className: 'btn btn-lock',
+        innerHTML: link.locked ? '🔒' : '🔓',
+        onClick: () => toggleLockLink(tab.id, containerData.id, link.id),
+      });
+      attachTooltip(
+        lockBtn,
+        link.locked ? 'Unlock link' : 'Lock link',
+        link.locked
+          ? 'Link is locked. Click to unlock.'
+          : 'Protect link from being trashed when opened'
+      );
+      actions.appendChild(lockBtn);
+
       const deleteBtn = createEl('button', {
         className: 'btn btn-delete',
         textContent: 'Trash',
@@ -1157,6 +1192,12 @@ function renderActiveTab(container) {
       linkRow.appendChild(linkInfo);
       linkRow.appendChild(tooltip);
       linkRow.appendChild(actions);
+
+      // Add visual indicator for locked links
+      if (link.locked) {
+        linkRow.classList.add('link-locked');
+      }
+
       content.appendChild(linkRow);
     });
 

@@ -601,6 +601,30 @@ h1 {
   border-color: var(--danger);
 }
 
+.btn-lock {
+  padding: 6px 10px;
+  font-size: 1.1em;
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-secondary);
+  transition: all 0.2s ease;
+}
+
+.btn-lock:hover {
+  color: var(--accent);
+  background: rgba(99, 102, 241, 0.1);
+  border-color: var(--accent);
+}
+
+.link-locked {
+  background: linear-gradient(
+    90deg,
+    rgba(99, 102, 241, 0.05) 0%,
+    transparent 100%
+  );
+  border-left: 3px solid var(--accent);
+}
+
 .btn-primary {
   background: var(--accent);
   border-color: var(--accent);

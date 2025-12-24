@@ -33,12 +33,16 @@ body {
     'Helvetica Neue', Arial, sans-serif;
   font-size: 14px;
   line-height: 1.5;
+  /* Prevent page-level horizontal scrollbars caused by floating tooltips */
+  overflow-x: hidden;
 }
 
 #app {
   /* max-width: 1400px; */
   margin: 0 auto;
   padding: 24px;
+  /* Prevent horizontal scrollbars in the main container */
+  overflow-x: hidden;
 }
 
 h1 {
@@ -148,7 +152,7 @@ h1 {
   font-weight: 500;
   transition: all 0.2s ease;
   position: relative;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .tab::before {
@@ -261,6 +265,8 @@ h1 {
 .container {
   max-height: 60vh;
   overflow-y: auto;
+  /* Prevent inner horizontal scrollbars in each container */
+  overflow-x: hidden;
   background: var(--bg-secondary);
   border-radius: 12px;
   border: 1px solid var(--border);
@@ -338,7 +344,7 @@ h1 {
   display: flex;
   gap: 6px;
   max-width: 0;
-  overflow: hidden;
+  overflow: visible;
   opacity: 0;
   transition: all 0.2s ease;
 }
@@ -348,7 +354,14 @@ h1 {
   opacity: 1;
 }
 
+/* Ensure actions remain visible while hovering them, so tooltips can show */
+.container-actions:hover {
+  max-width: 200px;
+  opacity: 1;
+}
+
 .container-action-btn {
+  position: relative;
   padding: 6px;
   background: var(--bg-tertiary);
   border: 1px solid var(--border);
@@ -619,6 +632,7 @@ h1 {
 }
 
 .btn {
+  position: relative;
   padding: 8px 14px;
   background: var(--bg-tertiary);
   border: 1px solid var(--border);
@@ -642,9 +656,11 @@ h1 {
 }
 
 .btn-delete {
-  padding: 6px 12px;
+  padding: 6px 10px;
   color: var(--danger);
   border-color: transparent;
+  font-size: 1.2em;
+  line-height: 1;
 }
 
 .btn-delete:hover {
@@ -652,9 +668,23 @@ h1 {
   border-color: var(--danger);
 }
 
+.btn-restore {
+  padding: 6px 10px;
+  color: var(--success);
+  border-color: transparent;
+  font-size: 1.2em;
+  line-height: 1;
+}
+
+.btn-restore:hover {
+  background: rgba(63, 185, 80, 0.1);
+  border-color: var(--success);
+}
+
 .btn-lock {
   padding: 6px 10px;
-  font-size: 1.1em;
+  font-size: 1.2em;
+  line-height: 1;
   background: transparent;
   border-color: transparent;
   color: var(--text-secondary);

@@ -1018,12 +1018,12 @@ function renderActiveTab(container) {
         const actions = createEl('div', { className: 'trash-actions' });
         const restoreBtn = createEl('button', {
           className: 'btn btn-restore',
-          textContent: 'Restore',
+          html: '↩️',
           onClick: () => restoreLink(link.id),
         });
         const deleteBtn = createEl('button', {
           className: 'btn btn-delete',
-          textContent: 'Delete',
+          html: '🗑️',
           onClick: () => {
             state.data.trash = state.data.trash.filter(l => l.id !== link.id);
             persist();
@@ -1243,7 +1243,7 @@ function renderActiveTab(container) {
       // Lock button
       const lockBtn = createEl('button', {
         className: 'btn btn-lock',
-        innerHTML: link.locked ? '🔒' : '🔓',
+        html: link.locked ? '🔒' : '🔓',
         onClick: () => toggleLockLink(tab.id, containerData.id, link.id),
       });
       attachTooltip(
@@ -1257,7 +1257,7 @@ function renderActiveTab(container) {
 
       const deleteBtn = createEl('button', {
         className: 'btn btn-delete',
-        textContent: 'Trash',
+        html: '🗑️',
         onClick: () => deleteLink(tab.id, containerData.id, link.id),
       });
       attachTooltip(deleteBtn, 'Trash link', 'Send this link to Trash');
@@ -1834,7 +1834,7 @@ function renderDuplicates(container, duplicateGroups) {
         const actions = createEl('div', { className: 'container-actions' });
         const trashBtn = createEl('button', {
           className: 'btn btn-delete',
-          textContent: 'Trash',
+          html: '🗑️',
           onClick: () => {
             const removed = moveLinkToTrash(
               linkRef.tabId,

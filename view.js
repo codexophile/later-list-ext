@@ -761,50 +761,102 @@ function importFromOneTab(file) {
 
 function processOneTabImport(text) {
   try {
-    const lines = text.trim().split('\n');
+    // Split by double line breaks to get groups (containers)
+    const groups = text.trim().split(/\n\s*\n/);
+
     const firstTab = state.data.tabs[0] || {
       id: id('tab'),
-      name: 'Imported',
+      name: 'Imported from OneTab',
       containers: [],
     };
-    const container = firstTab.containers[0] || {
-      id: id('container'),
-      name: 'Imported',
-      links: [],
-    };
 
-    lines.forEach(line => {
-      const trimmed = line.trim();
-      if (
-        !trimmed ||
-        trimmed.startsWith('http://localhost') ||
-        trimmed === '(Archived)'
-      )
-        return;
-
-      try {
-        const url = new URL(trimmed);
-        const title = url.hostname || url.toString();
-        container.links.push({ id: id('link'), title, url: url.toString() });
-      } catch {
-        // Skip invalid URLs
-      }
-    });
-
+    // Ensure firstTab has an id and is in the tabs array
     if (!firstTab.id) {
       firstTab.id = id('tab');
       state.data.tabs.push(firstTab);
     }
-    if (!container.id) {
-      container.id = id('container');
-      firstTab.containers.push(container);
-    }
+
+    let totalLinks = 0;
+    let containersCreated = 0;
+
+    // Process each group as a container
+    groups.forEach((group, groupIndex) => {
+      const lines = group.trim().split('\n');
+      const links = [];
+
+      lines.forEach(line => {
+        const trimmed = line.trim();
+
+        // Skip empty lines, localhost, and archived markers
+        if (
+          !trimmed ||
+          trimmed.startsWith('http://localhost') ||
+          trimmed === '(Archived)'
+        ) {
+          return;
+        }
+
+        // OneTab format: URL | Title
+        // Some entries may have metadata like {category:...,tags:[...]} after title
+        const pipeIndex = trimmed.indexOf(' | ');
+
+        if (pipeIndex > -1) {
+          // Extract URL and title
+          const urlPart = trimmed.substring(0, pipeIndex).trim();
+          let titlePart = trimmed.substring(pipeIndex + 3).trim();
+
+          // Remove metadata if present (e.g., {category:...,tags:[...]})
+          const metadataMatch = titlePart.match(/^(.*?)\s*\{category:/);
+          if (metadataMatch) {
+            titlePart = metadataMatch[1].trim();
+          }
+
+          try {
+            // Validate URL
+            const url = new URL(urlPart);
+            links.push({
+              id: id('link'),
+              title: titlePart || url.hostname || url.toString(),
+              url: url.toString(),
+            });
+          } catch {
+            // Skip invalid URLs
+          }
+        } else {
+          // Fallback: try parsing as just a URL (old format)
+          try {
+            const url = new URL(trimmed);
+            links.push({
+              id: id('link'),
+              title: url.hostname || url.toString(),
+              url: url.toString(),
+            });
+          } catch {
+            // Skip invalid URLs
+          }
+        }
+      });
+
+      // Only create container if we have links
+      if (links.length > 0) {
+        const container = {
+          id: id('container'),
+          name: `Imported Group ${groupIndex + 1}`,
+          links: links,
+        };
+        firstTab.containers.push(container);
+        totalLinks += links.length;
+        containersCreated++;
+      }
+    });
 
     migrateAndFixData(state.data);
 
     persist();
     render();
-    alert(`Imported ${container.links.length} links`);
+    alert(
+      `Imported ${totalLinks} links into ${containersCreated} container(s)`
+    );
   } catch (err) {
     alert('Error importing OneTab format: ' + err.message);
   }

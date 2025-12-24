@@ -195,6 +195,7 @@ h1 {
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 20px;
   position: relative;
+  margin-bottom: 32px;
 }
 
 .container {
@@ -386,6 +387,7 @@ h1 {
   background: var(--accent);
   border-color: var(--accent);
   color: white;
+  margin-top: 24px;
 }
 
 .btn-primary:hover {

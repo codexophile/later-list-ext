@@ -421,7 +421,7 @@ h1 {
 }
 
 .duplicate-link::before {
-  content: '⚠';
+  content: '⧉';
   position: absolute;
   left: 8px;
   opacity: 0.6;

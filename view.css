@@ -317,13 +317,17 @@ h1 {
   position: absolute;
   right: 0px;
   margin: 4px;
-  visibility: hidden;
   display: flex;
   gap: 6px;
+  max-width: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition: all 0.2s ease;
 }
 
 :is(.tab, .container-header, .link):hover .container-actions {
-  visibility: visible;
+  max-width: 200px;
+  opacity: 1;
 }
 
 .link {

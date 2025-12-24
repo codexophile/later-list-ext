@@ -109,11 +109,13 @@ function createContextMenus() {
 chrome.runtime.onInstalled.addListener(async () => {
   await getData();
   createContextMenus();
+  chrome.tabs.create({ url: 'view.html' });
   console.log('LaterList installed and initialized.');
 });
 
 chrome.runtime.onStartup.addListener(() => {
   createContextMenus();
+  chrome.tabs.create({ url: 'view.html' });
 });
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {

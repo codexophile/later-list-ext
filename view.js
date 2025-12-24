@@ -366,7 +366,7 @@ function addContainer(tabId) {
   if (!tab) return;
   const name = prompt('Container name');
   if (!name) return;
-  tab.containers.push({ id: id('container'), name, links: [] });
+  tab.containers.unshift({ id: id('container'), name, links: [] });
   persist();
   render();
 }
@@ -637,7 +637,7 @@ function archiveLink(tabId, containerId, linkId) {
 function handleOpenLink(url, tabId, containerId, linkId) {
   chrome.tabs.create({ url, active: false });
   if (tabId && containerId && linkId) {
-    archiveLink(tabId, containerId, linkId);
+    deleteLink(tabId, containerId, linkId);
   }
 }
 

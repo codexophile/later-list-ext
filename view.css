@@ -306,6 +306,12 @@ h1 {
   border: 1px solid var(--border);
   border-radius: 12px;
   font-weight: 600;
+  opacity: 1;
+  transition: opacity 0.2s ease;
+}
+
+.container-header:hover .link-count {
+  opacity: 0;
 }
 
 .container-content {

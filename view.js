@@ -1288,74 +1288,99 @@ function renderDuplicates(container, duplicateGroups) {
   summaryRow.appendChild(normalizeToggle);
   container.appendChild(summaryRow);
 
-  duplicateGroups.forEach(group => {
-    const card = createEl('div', { className: 'duplicate-card' });
-    const header = createEl('div', { className: 'duplicate-card-header' });
+  const containersGrid = createEl('div', { className: 'containers' });
 
-    const urlEl = createEl('div', {
-      className: 'duplicate-url',
+  duplicateGroups.forEach(group => {
+    const containerEl = createEl('div', { className: 'container' });
+    const header = createEl('div', { className: 'container-header' });
+
+    const nameEl = createEl('div', {
       textContent: prettyUrl(group.links[0].url),
+      className: 'container-name',
+      style: 'cursor: default; flex: 1;',
     });
 
-    const badge = createEl('span', {
-      className: 'duplicate-count',
+    const stats = createEl('div', {
+      className: 'link-count',
       textContent: `${group.links.length} copies`,
     });
 
-    const actions = createEl('div', { className: 'duplicate-bulk-actions' });
+    const headerActions = createEl('div', { className: 'container-actions' });
+
     const keepNewestBtn = createEl('button', {
-      className: 'btn btn-primary',
-      textContent: 'Keep newest',
-      onClick: () => trashGroupExcept(group, 'newest'),
+      className: 'container-action-btn',
+      html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>',
+      title: 'Keep newest, trash rest',
+      onClick: e => {
+        e.stopPropagation();
+        trashGroupExcept(group, 'newest');
+      },
     });
 
     const keepOldestBtn = createEl('button', {
-      className: 'btn btn-secondary',
-      textContent: 'Keep oldest',
-      onClick: () => trashGroupExcept(group, 'oldest'),
+      className: 'container-action-btn',
+      html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>',
+      title: 'Keep oldest, trash rest',
+      onClick: e => {
+        e.stopPropagation();
+        trashGroupExcept(group, 'oldest');
+      },
     });
 
-    actions.appendChild(keepNewestBtn);
-    actions.appendChild(keepOldestBtn);
+    headerActions.appendChild(keepNewestBtn);
+    headerActions.appendChild(keepOldestBtn);
+    header.appendChild(nameEl);
+    header.appendChild(stats);
+    header.appendChild(headerActions);
 
-    header.appendChild(urlEl);
-    header.appendChild(badge);
-    header.appendChild(actions);
-    card.appendChild(header);
-
-    const list = createEl('div', { className: 'duplicate-list' });
+    const content = createEl('div', {
+      className: 'container-content duplicate-links-content',
+    });
 
     group.links
       .slice()
       .sort((a, b) => b.savedAt - a.savedAt)
       .forEach(linkRef => {
-        const row = createEl('div', { className: 'duplicate-row' });
-        const left = createEl('div', { className: 'duplicate-row-main' });
+        const linkRow = createEl('div', { className: 'link duplicate-link' });
 
-        const title = createEl('div', {
-          className: 'duplicate-title',
+        const favicon = createEl('img', {
+          className: 'link-favicon',
+          attrs: {
+            src: `https://www.google.com/s2/favicons?sz=32&domain=${
+              new URL(linkRef.url).hostname
+            }`,
+            alt: '',
+            loading: 'lazy',
+          },
+        });
+        favicon.onerror = () => {
+          favicon.style.display = 'none';
+        };
+
+        const linkInfo = createEl('div', { className: 'link-info-wrapper' });
+        const anchor = createEl('a', {
           textContent: linkRef.title,
+          attrs: { href: linkRef.url, target: '_blank' },
+        });
+        anchor.addEventListener('click', e => {
+          e.preventDefault();
+          chrome.tabs.create({ url: linkRef.url, active: false });
         });
 
-        const meta = createEl('div', {
-          className: 'duplicate-meta',
-          textContent: `${linkRef.tabName} · ${
-            linkRef.containerName
-          } · ${formatRelativeTime(linkRef.savedAt)}`,
-        });
+        const tooltip = createEl('div', { className: 'link-tooltip' });
+        const tooltipContent = [
+          `<strong>Tab:</strong> ${linkRef.tabName}`,
+          `<strong>Container:</strong> ${linkRef.containerName}`,
+          `<strong>URL:</strong> ${linkRef.url}`,
+          `<strong>Added:</strong> ${formatDate(
+            linkRef.savedAt
+          )} (${formatRelativeTime(linkRef.savedAt)})`,
+        ].join('<br>');
+        tooltip.innerHTML = tooltipContent;
 
-        left.appendChild(title);
-        left.appendChild(meta);
+        linkInfo.appendChild(anchor);
 
-        const right = createEl('div', { className: 'duplicate-row-actions' });
-
-        const openBtn = createEl('button', {
-          className: 'btn btn-secondary',
-          textContent: 'Open',
-          onClick: () =>
-            chrome.tabs.create({ url: linkRef.url, active: false }),
-        });
-
+        const actions = createEl('div', { className: 'container-actions' });
         const trashBtn = createEl('button', {
           className: 'btn btn-delete',
           textContent: 'Trash',
@@ -1372,17 +1397,20 @@ function renderDuplicates(container, duplicateGroups) {
           },
         });
 
-        right.appendChild(openBtn);
-        right.appendChild(trashBtn);
-
-        row.appendChild(left);
-        row.appendChild(right);
-        list.appendChild(row);
+        actions.appendChild(trashBtn);
+        linkRow.appendChild(favicon);
+        linkRow.appendChild(linkInfo);
+        linkRow.appendChild(tooltip);
+        linkRow.appendChild(actions);
+        content.appendChild(linkRow);
       });
 
-    card.appendChild(list);
-    container.appendChild(card);
+    containerEl.appendChild(header);
+    containerEl.appendChild(content);
+    containersGrid.appendChild(containerEl);
   });
+
+  container.appendChild(containersGrid);
 }
 
 function render() {

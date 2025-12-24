@@ -83,6 +83,11 @@ h1 {
   gap: 8px;
 }
 
+.header-tools .btn[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .header-tools .btn {
   padding: 8px 12px;
   font-size: 0.9em;
@@ -383,6 +388,11 @@ h1 {
   transition: all 0.2s ease;
 }
 
+.link.selected {
+  outline: 2px solid var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-light);
+}
+
 .link:hover {
   background: var(--hover);
   border-color: var(--border);
@@ -414,6 +424,10 @@ h1 {
   padding: 3px;
   box-sizing: border-box;
   border: 1px solid var(--border);
+}
+
+.link-select-checkbox {
+  margin-right: 10px;
 }
 
 .link-info-wrapper {

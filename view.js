@@ -8,6 +8,8 @@ let state = {
   duplicateUrls: new Set(),
   viewMode: 'links',
   aggressiveNormalization: false,
+  bulkMode: false,
+  selectedLinks: new Set(),
 };
 
 const dragHoverSwitch = {
@@ -473,6 +475,147 @@ function setViewMode(mode) {
   render();
 }
 
+function toggleBulkMode() {
+  state.bulkMode = !state.bulkMode;
+  if (!state.bulkMode) state.selectedLinks.clear();
+  render();
+}
+
+function linkKey(tabId, containerId, linkId) {
+  return `${tabId}|${containerId}|${linkId}`;
+}
+
+function parseLinkKey(key) {
+  const [tabId, containerId, linkId] = key.split('|');
+  return { tabId, containerId, linkId };
+}
+
+function isLinkSelected(tabId, containerId, linkId) {
+  return state.selectedLinks.has(linkKey(tabId, containerId, linkId));
+}
+
+function setLinkSelected(tabId, containerId, linkId, selected) {
+  const k = linkKey(tabId, containerId, linkId);
+  if (selected) state.selectedLinks.add(k);
+  else state.selectedLinks.delete(k);
+}
+
+function selectAllInContainer(tabId, containerId, selected) {
+  const tab = state.data.tabs.find(t => t.id === tabId);
+  const container = tab?.containers.find(c => c.id === containerId);
+  if (!container) return;
+  container.links.forEach(l =>
+    setLinkSelected(tabId, containerId, l.id, selected)
+  );
+}
+
+function clearSelection() {
+  state.selectedLinks.clear();
+  render();
+}
+
+function bulkTrashSelected() {
+  if (!state.selectedLinks.size) return;
+  if (!confirm(`Trash ${state.selectedLinks.size} selected link(s)?`)) return;
+  const keys = Array.from(state.selectedLinks).map(parseLinkKey);
+  // Process in a way that tolerates items from multiple containers
+  keys.forEach(({ tabId, containerId, linkId }) => {
+    moveLinkToTrash(tabId, containerId, linkId);
+  });
+  state.selectedLinks.clear();
+  persist();
+  render();
+}
+
+function showMoveModal(onConfirm) {
+  const modal = createEl('div', { className: 'modal-overlay' });
+  const modalContent = createEl('div', { className: 'modal-content' });
+  const title = createEl('h2', { textContent: 'Move selected links' });
+  const desc = createEl('p', {
+    className: 'modal-description',
+    textContent: 'Choose a destination container:',
+  });
+
+  const select = document.createElement('select');
+  select.style.width = '100%';
+  select.style.margin = '8px 0 16px';
+  state.data.tabs.forEach(tab => {
+    tab.containers.forEach(container => {
+      const option = document.createElement('option');
+      option.value = `${tab.id}|${container.id}`;
+      option.textContent = `${tab.name} — ${container.name}`;
+      select.appendChild(option);
+    });
+  });
+  if (!select.firstChild) {
+    const emptyOpt = document.createElement('option');
+    emptyOpt.value = '';
+    emptyOpt.textContent = 'No containers available';
+    select.appendChild(emptyOpt);
+  }
+
+  const buttons = createEl('div', { className: 'modal-button-group' });
+  const confirmBtn = createEl('button', {
+    className: 'btn btn-primary',
+    textContent: 'Move',
+  });
+  const cancelBtn = createEl('button', {
+    className: 'btn btn-secondary',
+    textContent: 'Cancel',
+  });
+  confirmBtn.disabled = !select.value;
+
+  select.addEventListener('change', () => {
+    confirmBtn.disabled = !select.value;
+  });
+
+  confirmBtn.addEventListener('click', () => {
+    if (!select.value) return;
+    const [tabId, containerId] = select.value.split('|');
+    document.body.removeChild(modal);
+    onConfirm(tabId, containerId);
+  });
+  cancelBtn.addEventListener('click', () => document.body.removeChild(modal));
+
+  buttons.appendChild(confirmBtn);
+  buttons.appendChild(cancelBtn);
+  modalContent.appendChild(title);
+  modalContent.appendChild(desc);
+  modalContent.appendChild(select);
+  modalContent.appendChild(buttons);
+  modal.appendChild(modalContent);
+  modal.addEventListener('click', e => {
+    if (e.target === modal) document.body.removeChild(modal);
+  });
+  document.body.appendChild(modal);
+}
+
+function bulkMoveSelected() {
+  if (!state.selectedLinks.size) return;
+  showMoveModal((targetTabId, targetContainerId) => {
+    const targetTab = state.data.tabs.find(t => t.id === targetTabId);
+    const targetContainer = targetTab?.containers.find(
+      c => c.id === targetContainerId
+    );
+    if (!targetContainer) return;
+
+    // Convert to array and sort keys to avoid index shifting issues by removing from bottom? We will remove by id lookup each time.
+    const keys = Array.from(state.selectedLinks).map(parseLinkKey);
+    keys.forEach(({ tabId, containerId, linkId }) => {
+      const fromTab = state.data.tabs.find(t => t.id === tabId);
+      const fromContainer = fromTab?.containers.find(c => c.id === containerId);
+      if (!fromContainer) return;
+      const idx = fromContainer.links.findIndex(l => l.id === linkId);
+      if (idx === -1) return;
+      const [moved] = fromContainer.links.splice(idx, 1);
+      targetContainer.links.push(moved);
+    });
+    state.selectedLinks.clear();
+    persist();
+    render();
+  });
+}
+
 function createEl(tag, opts = {}) {
   const el = document.createElement(tag);
   if (opts.className) el.className = opts.className;
@@ -825,6 +968,32 @@ function renderActiveTab(container) {
   tab.containers.forEach(containerData => {
     const containerEl = createEl('div', { className: 'container' });
     const header = createEl('div', { className: 'container-header' });
+    // Bulk select checkbox in container header
+    let containerSelectWrapper = null;
+    if (state.bulkMode) {
+      containerSelectWrapper = createEl('div', {
+        className: 'container-stats',
+      });
+      const containerCheckbox = document.createElement('input');
+      containerCheckbox.type = 'checkbox';
+      // Determine if all links in container are selected
+      const allSelected =
+        containerData.links.length > 0 &&
+        containerData.links.every(l =>
+          isLinkSelected(tab.id, containerData.id, l.id)
+        );
+      const anySelected = containerData.links.some(l =>
+        isLinkSelected(tab.id, containerData.id, l.id)
+      );
+      containerCheckbox.checked = allSelected;
+      containerCheckbox.indeterminate = !allSelected && anySelected;
+      containerCheckbox.addEventListener('click', e => {
+        e.stopPropagation();
+        selectAllInContainer(tab.id, containerData.id, e.currentTarget.checked);
+        render();
+      });
+      containerSelectWrapper.appendChild(containerCheckbox);
+    }
     const nameEl = createEl('div', {
       textContent: containerData.name,
       className: 'container-name',
@@ -901,6 +1070,7 @@ function renderActiveTab(container) {
     headerActions.appendChild(addLinkBtn);
     headerActions.appendChild(trashAllBtn);
     headerActions.appendChild(delContainerBtn);
+    if (containerSelectWrapper) header.appendChild(containerSelectWrapper);
     header.appendChild(nameEl);
     header.appendChild(stats);
     header.appendChild(headerActions);
@@ -914,6 +1084,24 @@ function renderActiveTab(container) {
       const linkRow = createEl('div', {
         className: isDuplicate ? 'link duplicate-link' : 'link',
       });
+      // Bulk-select checkbox per link
+      if (state.bulkMode) {
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.className = 'link-select-checkbox';
+        cb.checked = isLinkSelected(tab.id, containerData.id, link.id);
+        cb.addEventListener('click', e => {
+          e.stopPropagation();
+          e.preventDefault();
+          const checked = !isLinkSelected(tab.id, containerData.id, link.id);
+          setLinkSelected(tab.id, containerData.id, link.id, checked);
+          render();
+        });
+        linkRow.appendChild(cb);
+        if (isLinkSelected(tab.id, containerData.id, link.id)) {
+          linkRow.classList.add('selected');
+        }
+      }
       const favicon = createEl('img', {
         className: 'link-favicon',
         attrs: {
@@ -1615,6 +1803,38 @@ function render() {
     title: 'Open settings',
   });
 
+  // Bulk selection toggle and actions
+  const bulkToggleBtn = createEl('button', {
+    className: state.bulkMode ? 'btn btn-primary' : 'btn btn-secondary',
+    textContent: state.bulkMode ? 'Bulk: On' : 'Bulk: Off',
+    onClick: toggleBulkMode,
+    title: 'Toggle bulk selection mode',
+  });
+
+  const bulkMoveBtn = createEl('button', {
+    className: 'btn btn-secondary',
+    textContent: 'Move Selected',
+    onClick: bulkMoveSelected,
+    title: 'Move selected links to another container',
+  });
+  const bulkTrashBtn = createEl('button', {
+    className: 'btn btn-secondary',
+    textContent: 'Trash Selected',
+    onClick: bulkTrashSelected,
+    title: 'Trash selected links',
+  });
+  const bulkClearBtn = createEl('button', {
+    className: 'btn btn-secondary',
+    textContent: 'Clear Selection',
+    onClick: clearSelection,
+    title: 'Clear current selection',
+  });
+
+  // Disable action buttons when nothing selected or not in bulk mode
+  [bulkMoveBtn, bulkTrashBtn, bulkClearBtn].forEach(btn => {
+    btn.disabled = !state.bulkMode || state.selectedLinks.size === 0;
+  });
+
   attachTooltip(
     linksViewBtn,
     'Saved Links',
@@ -1629,12 +1849,28 @@ function render() {
   attachTooltip(importJsonBtn, 'Import JSON', 'Import a LaterList JSON backup');
   attachTooltip(importOnetabBtn, 'Import OneTab', 'Import a OneTab export');
   attachTooltip(settingsBtn, 'Settings', 'Open LaterList settings');
+  attachTooltip(
+    bulkToggleBtn,
+    'Bulk mode',
+    'Select multiple links to move or trash'
+  );
+  attachTooltip(
+    bulkMoveBtn,
+    'Move selected',
+    'Move selected links to a container'
+  );
+  attachTooltip(bulkTrashBtn, 'Trash selected', 'Move selected links to Trash');
+  attachTooltip(bulkClearBtn, 'Clear selection', 'Clear the current selection');
 
   toolsDiv.appendChild(linksViewBtn);
   toolsDiv.appendChild(duplicatesBtn);
   toolsDiv.appendChild(exportBtn);
   toolsDiv.appendChild(importJsonBtn);
   toolsDiv.appendChild(importOnetabBtn);
+  toolsDiv.appendChild(bulkToggleBtn);
+  toolsDiv.appendChild(bulkMoveBtn);
+  toolsDiv.appendChild(bulkTrashBtn);
+  toolsDiv.appendChild(bulkClearBtn);
   toolsDiv.appendChild(settingsBtn);
   header.appendChild(toolsDiv);
 

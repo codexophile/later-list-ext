@@ -387,7 +387,7 @@ h1 {
   background: var(--accent);
   border-color: var(--accent);
   color: white;
-  margin-top: 24px;
+  /* margin-top: 24px; */
 }
 
 .btn-primary:hover {

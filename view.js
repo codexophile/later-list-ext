@@ -13,6 +13,33 @@ let state = {
 const id = prefix =>
   `${prefix}-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
 
+function formatDate(timestamp) {
+  if (!timestamp) return 'Unknown';
+  const date = new Date(timestamp);
+  return date.toLocaleString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function formatRelativeTime(timestamp) {
+  if (!timestamp) return 'Unknown';
+  const now = Date.now();
+  const diff = now - timestamp;
+  const seconds = Math.floor(diff / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+  const days = Math.floor(hours / 24);
+
+  if (days > 0) return `${days} day${days > 1 ? 's' : ''} ago`;
+  if (hours > 0) return `${hours} hour${hours > 1 ? 's' : ''} ago`;
+  if (minutes > 0) return `${minutes} minute${minutes > 1 ? 's' : ''} ago`;
+  return 'Just now';
+}
+
 function ensureArray(value) {
   return Array.isArray(value) ? value : [];
 }
@@ -666,6 +693,7 @@ function renderActiveTab(container) {
         favicon.onerror = () => {
           favicon.style.display = 'none';
         };
+        const linkInfo = createEl('div', { className: 'link-info-wrapper' });
         const anchor = createEl('a', {
           textContent: link.title,
           attrs: { href: link.url, target: '_blank' },
@@ -674,7 +702,21 @@ function renderActiveTab(container) {
           e.preventDefault();
           chrome.tabs.create({ url: link.url, active: false });
         });
-        anchor.title = 'Click to open';
+
+        const tooltip = createEl('div', { className: 'link-tooltip' });
+        const tooltipContent = [
+          `<strong>URL:</strong> ${link.url}`,
+          `<strong>Added:</strong> ${formatDate(
+            link.savedAt
+          )} (${formatRelativeTime(link.savedAt)})`,
+          `<strong>Deleted:</strong> ${formatDate(
+            link.deletedAt
+          )} (${formatRelativeTime(link.deletedAt)})`,
+        ].join('<br>');
+        tooltip.innerHTML = tooltipContent;
+
+        linkInfo.appendChild(anchor);
+        linkInfo.appendChild(tooltip);
         const actions = createEl('div', { className: 'trash-actions' });
         const restoreBtn = createEl('button', {
           className: 'btn btn-restore',
@@ -693,7 +735,7 @@ function renderActiveTab(container) {
         actions.appendChild(restoreBtn);
         actions.appendChild(deleteBtn);
         linkRow.appendChild(favicon);
-        linkRow.appendChild(anchor);
+        linkRow.appendChild(linkInfo);
         linkRow.appendChild(actions);
         trashContainer.appendChild(linkRow);
       });
@@ -782,6 +824,7 @@ function renderActiveTab(container) {
       favicon.onerror = () => {
         favicon.style.display = 'none';
       };
+      const linkInfo = createEl('div', { className: 'link-info-wrapper' });
       const anchor = createEl('a', {
         textContent: link.title,
         attrs: { href: link.url, target: '_blank' },
@@ -790,7 +833,19 @@ function renderActiveTab(container) {
         e.preventDefault();
         handleOpenLink(link.url, tab.id, containerData.id, link.id);
       });
-      anchor.title = 'Click to open (will be archived)';
+
+      const tooltip = createEl('div', { className: 'link-tooltip' });
+      const tooltipContent = [
+        `<strong>URL:</strong> ${link.url}`,
+        `<strong>Added:</strong> ${formatDate(
+          link.savedAt
+        )} (${formatRelativeTime(link.savedAt)})`,
+      ].join('<br>');
+      tooltip.innerHTML = tooltipContent;
+
+      linkInfo.appendChild(anchor);
+      linkInfo.appendChild(tooltip);
+
       anchor.addEventListener('dblclick', e => {
         e.preventDefault();
         e.stopPropagation();
@@ -808,7 +863,7 @@ function renderActiveTab(container) {
       });
       actions.appendChild(deleteBtn);
       linkRow.appendChild(favicon);
-      linkRow.appendChild(anchor);
+      linkRow.appendChild(linkInfo);
       linkRow.appendChild(actions);
       content.appendChild(linkRow);
     });

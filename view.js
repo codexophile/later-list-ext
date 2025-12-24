@@ -870,18 +870,19 @@ function renderTabs(container) {
   specialTabsWrapper.appendChild(duplicatesEl);
   specialTabsWrapper.appendChild(trashEl);
 
-  tabsWrapper.appendChild(specialTabsWrapper);
-
   const addTabBtn = createEl('button', {
-    className: 'btn btn-primary',
-    textContent: '+ Tab',
+    className: 'btn-add-tab',
+    html: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>',
+    title: 'Add tab',
     onClick: e => {
       e.stopPropagation();
       addTab();
     },
   });
   attachTooltip(addTabBtn, 'Add tab', 'Create a new tab');
+
   tabsWrapper.appendChild(addTabBtn);
+  tabsWrapper.appendChild(specialTabsWrapper);
 
   container.appendChild(tabsWrapper);
 }

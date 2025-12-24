@@ -1677,6 +1677,14 @@ function initSortable(rootEl) {
     listEl._laterlistSortable = new Sortable(listEl, {
       group: { name: 'links', pull: true, put: true },
       animation: 150,
+      draggable: '.link',
+      swapThreshold: 0.4,
+      fallbackOnBody: true,
+      fallbackTolerance: 6,
+      onMove: evt => {
+        // Only allow dropping links into container-content lists
+        return evt.to?.classList.contains('container-content') || false;
+      },
       onStart: () => setDragHoverActive(true),
       onEnd: evt => {
         try {
@@ -1715,6 +1723,11 @@ function initSortable(rootEl) {
       group: { name: 'containers', pull: true, put: true },
       animation: 150,
       handle: '.container-header',
+      draggable: '.container',
+      onMove: evt => {
+        // Only allow dropping containers into container grids
+        return evt.to?.classList.contains('containers') || false;
+      },
       onStart: () => setDragHoverActive(true),
       onEnd: evt => {
         try {

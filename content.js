@@ -92,6 +92,39 @@
     window.removeEventListener('keydown', handleKeydown, true);
   }
 
+  // Extract image from page: try og:image, then favicon, then first large image
+  async function extractPageImage() {
+    try {
+      // Try Open Graph image first
+      const ogImage = document.querySelector('meta[property="og:image"]');
+      if (ogImage?.content) {
+        return ogImage.content;
+      }
+
+      // Try favicon
+      const favicon = document.querySelector('link[rel*="icon"]');
+      if (favicon?.href) {
+        return favicon.href;
+      }
+
+      // Try first image on page that's reasonably sized
+      const images = document.querySelectorAll('img');
+      for (const img of images) {
+        if (
+          img.naturalWidth >= 100 &&
+          img.naturalHeight >= 100 &&
+          img.offsetParent !== null
+        ) {
+          return img.src;
+        }
+      }
+
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
   function handleKeydown(event) {
     if (event.key === 'Escape') {
       removePopup();
@@ -178,6 +211,7 @@
       'laterlist-popup__button laterlist-popup__button--primary';
     saveBtn.textContent = 'Save';
     saveBtn.addEventListener('click', async () => {
+      const imageUrl = await extractPageImage();
       await chrome.runtime.sendMessage({
         type: 'laterlist:addLink',
         payload: {
@@ -185,6 +219,7 @@
           title,
           tabId: tabSelect.value,
           containerId: containerSelect.value,
+          imageUrl,
         },
       });
       removePopup();

@@ -226,7 +226,15 @@ function ensureContainerInTab(tab) {
   return tab.containers[0];
 }
 
-async function addLink({ url, title, tabId, containerId }) {
+async function addLink({ url, title, tabId, containerId, imageUrl }) {
+  console.log('[LaterList Background] addLink called with:', {
+    url,
+    title,
+    tabId,
+    containerId,
+    imageUrl,
+  });
+
   const data = await getData();
   const tab = ensureTab(data, tabId);
 
@@ -245,7 +253,15 @@ async function addLink({ url, title, tabId, containerId }) {
     savedAt: Date.now(),
   };
 
+  if (imageUrl) {
+    newLink.imageUrl = imageUrl;
+    console.log('[LaterList Background] Image URL saved:', imageUrl);
+  } else {
+    console.log('[LaterList Background] No image URL provided');
+  }
+
   container.links.push(newLink);
+  console.log('[LaterList Background] Link saved:', newLink);
   await saveData(data);
   return newLink;
 }

@@ -101,6 +101,44 @@ async function saveToSelection({ closeTabAfterSave }) {
 
   setBusy(true);
   try {
+    // Extract image from the current tab
+    let imageUrl = null;
+    if (typeof currentPage.tabId === 'number') {
+      try {
+        const results = await chrome.scripting.executeScript({
+          target: { tabId: currentPage.tabId },
+          function: () => {
+            // Try Open Graph image first
+            const ogImage = document.querySelector('meta[property="og:image"]');
+            if (ogImage?.content) return ogImage.content;
+
+            // Try favicon
+            const favicon = document.querySelector('link[rel*="icon"]');
+            if (favicon?.href) return favicon.href;
+
+            // Try first image on page
+            const images = document.querySelectorAll('img');
+            for (const img of images) {
+              if (
+                img.naturalWidth >= 100 &&
+                img.naturalHeight >= 100 &&
+                img.offsetParent !== null
+              ) {
+                return img.src;
+              }
+            }
+            return null;
+          },
+        });
+        imageUrl = results?.[0]?.result || null;
+        console.log('[LaterList] Extracted image URL:', imageUrl);
+      } catch (error) {
+        // If extraction fails, continue without image
+        console.log('[LaterList] Image extraction failed:', error);
+        imageUrl = null;
+      }
+    }
+
     const result = await chrome.runtime.sendMessage({
       type: 'laterlist:addLink',
       payload: {
@@ -108,6 +146,7 @@ async function saveToSelection({ closeTabAfterSave }) {
         title: currentPage.title,
         tabId,
         containerId,
+        imageUrl,
       },
     });
 
@@ -171,18 +210,32 @@ async function sendAllTabs() {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-    await updateLinkCount();
-  }
-
   async function updateLinkCount() {
     const response = await chrome.runtime.sendMessage({
       type: 'laterlist:getData',
     });
 
     const data = response?.data;
-    const totalLinks = data?.links.filter(link => !link.inTrash).length || 0; // Assuming 'inTrash' is the property to check
+    let totalLinks = 0;
+
+    // Count all links across all tabs and containers
+    if (data?.tabs) {
+      data.tabs.forEach(tab => {
+        if (tab.containers) {
+          tab.containers.forEach(container => {
+            if (container.links) {
+              totalLinks += container.links.length;
+            }
+          });
+        }
+      });
+    }
+
     document.getElementById('link-count').textContent = totalLinks;
   }
+
+  await updateLinkCount();
+
   document.getElementById('open-view')?.addEventListener('click', () => {
     chrome.runtime.openOptionsPage();
   });

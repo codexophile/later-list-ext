@@ -578,6 +578,16 @@ h1 {
   border: 1px solid var(--accent);
 }
 
+.status-overlay-image {
+  width: 100%;
+  height: auto;
+  max-height: 200px;
+  object-fit: cover;
+  border-radius: 8px;
+  margin-bottom: 8px;
+  border: 1px solid var(--border);
+}
+
 .duplicate-id {
   border: 2px solid purple;
   background-color: #ffcccc;

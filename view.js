@@ -95,7 +95,20 @@ function createStatusOverlay() {
 function showStatusOverlay(linkData) {
   const overlay = createStatusOverlay();
 
+  console.log('[LaterList] Showing status overlay for link:', linkData);
+
   let content = `<div class="status-overlay-title">${linkData.title}</div>`;
+
+  // Add image section if available
+  if (linkData.imageUrl) {
+    console.log('[LaterList] Displaying image:', linkData.imageUrl);
+    content += `<div class="status-overlay-section">`;
+    content += `<img src="${linkData.imageUrl}" alt="Page preview" class="status-overlay-image" onerror="this.style.display='none'">`;
+    content += `</div>`;
+  } else {
+    console.log('[LaterList] No image URL found for this link');
+  }
+
   content += `<div class="status-overlay-section">`;
   content += `<div class="status-overlay-label">URL</div>`;
   content += `<div class="status-overlay-value">${linkData.url}</div>`;
@@ -289,6 +302,11 @@ function migrateAndFixData(data) {
         if (link.savedAt !== nextSavedAt) {
           link.savedAt = nextSavedAt;
           changed = true;
+        }
+
+        // Preserve imageUrl if it exists
+        if (!link.imageUrl) {
+          link.imageUrl = undefined;
         }
       });
     });
@@ -1029,6 +1047,7 @@ function renderActiveTab(container) {
             url: link.url,
             savedAt: link.savedAt,
             deletedAt: link.deletedAt,
+            imageUrl: link.imageUrl,
             type: 'trash',
           });
         });
@@ -1243,6 +1262,7 @@ function renderActiveTab(container) {
           url: link.url,
           savedAt: link.savedAt,
           locked: link.locked,
+          imageUrl: link.imageUrl,
           type: 'regular',
         });
       });
@@ -1845,6 +1865,7 @@ function renderDuplicates(container, duplicateGroups) {
             savedAt: linkRef.savedAt,
             tabName: linkRef.tabName,
             containerName: linkRef.containerName,
+            imageUrl: linkRef.imageUrl,
             type: 'duplicate',
           });
         });

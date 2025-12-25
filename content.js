@@ -255,6 +255,11 @@
       const candidates = [];
       const seen = new Set();
 
+      const isSvg = url => {
+        const u = url.trim().toLowerCase();
+        return u.endsWith('.svg') || u.startsWith('data:image/svg');
+      };
+
       const add = url => {
         if (!url) return;
         const trimmed = url.trim();
@@ -266,6 +271,7 @@
           trimmed.startsWith('javascript:')
         )
           return;
+        if (isSvg(trimmed)) return;
         seen.add(trimmed);
         candidates.push(trimmed);
       };
@@ -297,15 +303,21 @@
       const metaUrls = [];
       metaSelectors.forEach(sel => {
         const el = document.querySelector(sel);
-        if (el?.content && !seen.has(el.content.trim())) {
-          metaUrls.push(el.content.trim());
+        if (el?.content) {
+          const val = el.content.trim();
+          if (!seen.has(val) && !isSvg(val)) {
+            metaUrls.push(val);
+          }
         }
       });
 
       // Icons
       const icon = document.querySelector('link[rel*="icon"]');
-      if (icon?.href && !seen.has(icon.href)) {
-        metaUrls.push(icon.href);
+      if (icon?.href) {
+        const val = icon.href;
+        if (!seen.has(val) && !isSvg(val)) {
+          metaUrls.push(val);
+        }
       }
 
       // Validate meta tag images (check if they actually load)

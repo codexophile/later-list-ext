@@ -84,6 +84,9 @@ function formatRelativeTime(timestamp) {
 }
 
 let statusOverlay = null;
+let imageViewerOverlay = null;
+let imageViewerState = { images: [], index: 0, link: null };
+let detailOverlay = null;
 
 function createStatusOverlay() {
   if (statusOverlay) return statusOverlay;
@@ -205,6 +208,262 @@ function showStatusOverlay(linkData) {
 function hideStatusOverlay() {
   if (statusOverlay) {
     statusOverlay.style.display = 'none';
+  }
+}
+
+function ensureDetailOverlay() {
+  if (detailOverlay) return detailOverlay;
+
+  const overlay = createEl('div', {
+    className: 'detail-overlay',
+    style: 'display: none;',
+  });
+  const backdrop = createEl('div', { className: 'detail-overlay-backdrop' });
+  const card = createEl('div', { className: 'detail-overlay-card' });
+  const closeBtn = createEl('button', {
+    className: 'detail-overlay-close',
+    textContent: '✕',
+  });
+  const body = createEl('div', { className: 'detail-overlay-body' });
+
+  card.appendChild(closeBtn);
+  card.appendChild(body);
+  overlay.appendChild(backdrop);
+  overlay.appendChild(card);
+  document.body.appendChild(overlay);
+
+  closeBtn.addEventListener('click', hideDetailOverlay);
+  backdrop.addEventListener('click', hideDetailOverlay);
+  document.addEventListener('keydown', e => {
+    if (overlay.style.display === 'none') return;
+    if (e.key === 'Escape') hideDetailOverlay();
+  });
+
+  overlay._body = body;
+  detailOverlay = overlay;
+  return overlay;
+}
+
+function buildDetailContent(linkData) {
+  const images = getLinkImages(linkData);
+  let content = '';
+  content += `<div class="detail-overlay-title">${linkData.title}</div>`;
+
+  if (images.length > 0) {
+    content += `<div class="status-overlay-gallery detail-overlay-gallery">`;
+    if (images.length === 1) {
+      content += `<img src="${images[0]}" alt="Page preview" class="status-overlay-image" onerror="this.style.display='none'">`;
+    } else {
+      content += `<div class="status-overlay-main-image-wrapper">`;
+      content += `<img src="${images[0]}" alt="Page preview" class="status-overlay-image status-overlay-main-image" data-index="0" onerror="this.style.display='none'">`;
+      content += `</div>`;
+      content += `<div class="status-overlay-thumb-strip">`;
+      images.forEach((img, idx) => {
+        content += `<div class="status-overlay-thumb" data-index="${idx}" style="background-image: url('${img}')"></div>`;
+      });
+      content += `</div>`;
+      content += `<div class="status-overlay-image-counter">${images.length} images</div>`;
+    }
+    content += `</div>`;
+  }
+
+  content += `<div class="status-overlay-section">`;
+  content += `<div class="status-overlay-label">URL</div>`;
+  content += `<div class="status-overlay-value">${linkData.url}</div>`;
+  content += `</div>`;
+
+  if (linkData.savedAt) {
+    content += `<div class="status-overlay-section">`;
+    content += `<div class="status-overlay-label">Added</div>`;
+    content += `<div class="status-overlay-value">${formatDate(
+      linkData.savedAt
+    )}</div>`;
+    content += `<div class="status-overlay-relative">${formatRelativeTime(
+      linkData.savedAt
+    )}</div>`;
+    content += `</div>`;
+  }
+
+  if (linkData.deletedAt) {
+    content += `<div class="status-overlay-section">`;
+    content += `<div class="status-overlay-label">Deleted</div>`;
+    content += `<div class="status-overlay-value">${formatDate(
+      linkData.deletedAt
+    )}</div>`;
+    content += `<div class="status-overlay-relative">${formatRelativeTime(
+      linkData.deletedAt
+    )}</div>`;
+    content += `</div>`;
+  }
+
+  if (linkData.tabName || linkData.containerName) {
+    content += `<div class="status-overlay-section">`;
+    content += `<div class="status-overlay-label">Location</div>`;
+    content += `<div class="status-overlay-value">${linkData.tabName || ''}${
+      linkData.tabName && linkData.containerName ? ' › ' : ''
+    }${linkData.containerName || ''}</div>`;
+    content += `</div>`;
+  }
+
+  return content;
+}
+
+function wireDetailGallery(overlay, images) {
+  if (images.length <= 1) return;
+  const mainImg = overlay.querySelector('.status-overlay-main-image');
+  const thumbs = overlay.querySelectorAll('.status-overlay-thumb');
+  thumbs.forEach(thumb => {
+    thumb.addEventListener('click', () => {
+      const idx = parseInt(thumb.dataset.index);
+      mainImg.src = images[idx];
+      thumbs.forEach(t => t.classList.remove('active'));
+      thumb.classList.add('active');
+    });
+  });
+  if (thumbs.length > 0) thumbs[0].classList.add('active');
+}
+
+function showDetailOverlay(linkData) {
+  const overlay = ensureDetailOverlay();
+  const images = getLinkImages(linkData);
+  overlay._body.innerHTML = buildDetailContent(linkData);
+  wireDetailGallery(overlay, images);
+  overlay.style.display = 'flex';
+}
+
+function hideDetailOverlay() {
+  if (detailOverlay) detailOverlay.style.display = 'none';
+}
+
+function ensureImageViewer() {
+  if (imageViewerOverlay) return imageViewerOverlay;
+
+  const overlay = createEl('div', {
+    className: 'image-viewer-overlay',
+    style: 'display: none;',
+  });
+  const backdrop = createEl('div', { className: 'image-viewer-backdrop' });
+  const content = createEl('div', { className: 'image-viewer-content' });
+  const closeBtn = createEl('button', {
+    className: 'image-viewer-close',
+    textContent: 'Close',
+  });
+
+  const mainWrapper = createEl('div', {
+    className: 'image-viewer-main-wrapper',
+  });
+  const prevBtn = createEl('button', {
+    className: 'image-viewer-nav image-viewer-prev',
+    textContent: '<',
+  });
+  const mainImg = createEl('img', {
+    className: 'image-viewer-main',
+    attrs: { alt: 'Page image', loading: 'lazy' },
+  });
+  const nextBtn = createEl('button', {
+    className: 'image-viewer-nav image-viewer-next',
+    textContent: '>',
+  });
+
+  const meta = createEl('div', { className: 'image-viewer-meta' });
+  const thumbs = createEl('div', { className: 'image-viewer-thumbs' });
+
+  mainWrapper.appendChild(prevBtn);
+  mainWrapper.appendChild(mainImg);
+  mainWrapper.appendChild(nextBtn);
+
+  content.appendChild(closeBtn);
+  content.appendChild(mainWrapper);
+  content.appendChild(meta);
+  content.appendChild(thumbs);
+
+  overlay.appendChild(backdrop);
+  overlay.appendChild(content);
+  document.body.appendChild(overlay);
+
+  overlay._mainImg = mainImg;
+  overlay._thumbs = thumbs;
+  overlay._meta = meta;
+  overlay._prevBtn = prevBtn;
+  overlay._nextBtn = nextBtn;
+  overlay._closeBtn = closeBtn;
+  overlay._backdrop = backdrop;
+
+  closeBtn.addEventListener('click', hideImageViewer);
+  backdrop.addEventListener('click', hideImageViewer);
+  prevBtn.addEventListener('click', () => stepImageViewer(-1));
+  nextBtn.addEventListener('click', () => stepImageViewer(1));
+
+  document.addEventListener('keydown', e => {
+    if (overlay.style.display === 'none') return;
+    if (e.key === 'Escape') hideImageViewer();
+    if (e.key === 'ArrowLeft') stepImageViewer(-1);
+    if (e.key === 'ArrowRight') stepImageViewer(1);
+  });
+
+  imageViewerOverlay = overlay;
+  return overlay;
+}
+
+function getLinkImages(linkData) {
+  return linkData.imageUrls && linkData.imageUrls.length > 0
+    ? linkData.imageUrls
+    : linkData.imageUrl
+    ? [linkData.imageUrl]
+    : [];
+}
+
+function renderImageViewer(index) {
+  const overlay = ensureImageViewer();
+  const { images, link } = imageViewerState;
+  if (!images.length) return;
+
+  const safeIndex = ((index % images.length) + images.length) % images.length;
+  imageViewerState.index = safeIndex;
+
+  overlay._mainImg.src = images[safeIndex];
+  overlay._meta.textContent = `Image ${safeIndex + 1} of ${images.length} — ${
+    link.title || link.url
+  }`;
+
+  overlay._thumbs
+    .querySelectorAll('.image-viewer-thumb')
+    .forEach((thumb, idx) => {
+      if (idx === safeIndex) thumb.classList.add('active');
+      else thumb.classList.remove('active');
+    });
+}
+
+function stepImageViewer(delta) {
+  const nextIndex = imageViewerState.index + delta;
+  renderImageViewer(nextIndex);
+}
+
+function showImageViewer(linkData) {
+  const images = getLinkImages(linkData);
+  if (!images.length) return;
+
+  const overlay = ensureImageViewer();
+  imageViewerState = { images, index: 0, link: linkData };
+
+  overlay._thumbs.innerHTML = '';
+  images.forEach((img, idx) => {
+    const thumb = createEl('div', {
+      className: 'image-viewer-thumb',
+      style: `background-image: url('${img}')`,
+    });
+    thumb.dataset.index = idx;
+    thumb.addEventListener('click', () => renderImageViewer(idx));
+    overlay._thumbs.appendChild(thumb);
+  });
+
+  renderImageViewer(0);
+  overlay.style.display = 'flex';
+}
+
+function hideImageViewer() {
+  if (imageViewerOverlay) {
+    imageViewerOverlay.style.display = 'none';
   }
 }
 
@@ -1096,6 +1355,11 @@ function renderActiveTab(container) {
             className: 'link-badge image-badge',
             textContent: imgCountTrash > 1 ? String(imgCountTrash) : 'IMG',
           });
+          imageBadge.addEventListener('click', e => {
+            e.stopPropagation();
+            e.preventDefault();
+            showImageViewer(link);
+          });
           linkInfo.appendChild(imageBadge);
         }
 
@@ -1324,6 +1588,11 @@ function renderActiveTab(container) {
           className: 'link-badge image-badge',
           textContent: imgCount > 1 ? String(imgCount) : 'IMG',
         });
+        imageBadge.addEventListener('click', e => {
+          e.stopPropagation();
+          e.preventDefault();
+          showImageViewer(link);
+        });
         linkInfo.appendChild(imageBadge);
       }
 
@@ -1376,6 +1645,25 @@ function renderActiveTab(container) {
       });
       attachTooltip(deleteBtn, 'Trash link', 'Send this link to Trash');
       actions.appendChild(deleteBtn);
+
+      const detailsBtn = createEl('button', {
+        className: 'btn btn-secondary',
+        html: '🖼️',
+        onClick: e => {
+          e.stopPropagation();
+          showDetailOverlay({
+            ...link,
+            tabName: tab.name,
+            containerName: containerData.name,
+          });
+        },
+      });
+      attachTooltip(
+        detailsBtn,
+        'View details',
+        'Open full overlay with images and metadata'
+      );
+      actions.appendChild(detailsBtn);
       linkRow.appendChild(favicon);
       linkRow.appendChild(linkInfo);
       linkRow.appendChild(actions);
@@ -1938,6 +2226,11 @@ function renderDuplicates(container, duplicateGroups) {
           const imageBadge = createEl('span', {
             className: 'link-badge image-badge',
             textContent: imgCountDup > 1 ? String(imgCountDup) : 'IMG',
+          });
+          imageBadge.addEventListener('click', e => {
+            e.stopPropagation();
+            e.preventDefault();
+            showImageViewer(linkRef);
           });
           linkInfo.appendChild(imageBadge);
         }

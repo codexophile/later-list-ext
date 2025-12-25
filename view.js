@@ -10,6 +10,8 @@ let state = {
   aggressiveNormalization: false,
   bulkMode: false,
   selectedLinks: new Set(),
+  refreshingImages: false,
+  refreshLastResult: null,
 };
 
 const dragHoverSwitch = {
@@ -1039,6 +1041,13 @@ function renderActiveTab(container) {
         });
 
         linkInfo.appendChild(anchor);
+        if (link.imageUrl) {
+          const imageBadge = createEl('span', {
+            className: 'link-badge image-badge',
+            textContent: 'IMG',
+          });
+          linkInfo.appendChild(imageBadge);
+        }
 
         // Add hover events for status overlay
         linkRow.addEventListener('mouseenter', () => {
@@ -1254,6 +1263,13 @@ function renderActiveTab(container) {
       });
 
       linkInfo.appendChild(anchor);
+      if (link.imageUrl) {
+        const imageBadge = createEl('span', {
+          className: 'link-badge image-badge',
+          textContent: 'IMG',
+        });
+        linkInfo.appendChild(imageBadge);
+      }
 
       // Add hover events for status overlay
       linkRow.addEventListener('mouseenter', () => {
@@ -1856,6 +1872,13 @@ function renderDuplicates(container, duplicateGroups) {
         });
 
         linkInfo.appendChild(anchor);
+        if (linkRef.imageUrl) {
+          const imageBadge = createEl('span', {
+            className: 'link-badge image-badge',
+            textContent: 'IMG',
+          });
+          linkInfo.appendChild(imageBadge);
+        }
 
         // Add hover events for status overlay
         linkRow.addEventListener('mouseenter', () => {
@@ -1906,6 +1929,46 @@ function renderDuplicates(container, duplicateGroups) {
   container.appendChild(containersGrid);
 }
 
+function countMissingImages() {
+  let count = 0;
+  (state.data?.tabs || []).forEach(tab => {
+    (tab.containers || []).forEach(container => {
+      (container.links || []).forEach(link => {
+        if (!link.imageUrl) count += 1;
+      });
+    });
+  });
+  (state.data?.trash || []).forEach(link => {
+    if (!link.imageUrl) count += 1;
+  });
+  return count;
+}
+
+async function refreshMissingImages(limit = 50) {
+  if (state.refreshingImages) return;
+  state.refreshingImages = true;
+  render();
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: 'laterlist:refreshImages',
+      payload: { limit },
+    });
+    if (response?.success) {
+      state.refreshLastResult = response.result;
+      await loadData();
+    } else {
+      state.refreshLastResult = {
+        error: response?.error || 'Unknown error',
+      };
+    }
+  } catch (err) {
+    state.refreshLastResult = { error: err?.message || 'Unknown error' };
+  } finally {
+    state.refreshingImages = false;
+    render();
+  }
+}
+
 function render() {
   const duplicateGroups = collectDuplicateGroups();
   state.duplicateUrls = new Set(duplicateGroups.map(group => group.normalized));
@@ -1932,6 +1995,19 @@ function render() {
 
   headerLeft.appendChild(titleEl);
   headerLeft.appendChild(totalEl);
+  if (state.refreshLastResult) {
+    const { updated, processed, remaining, error } = state.refreshLastResult;
+    const msg = error
+      ? `Thumbnail refresh failed: ${error}`
+      : `Thumbnails: updated ${updated || 0}/${processed || 0}${
+          typeof remaining === 'number' ? ` • ${remaining} remaining` : ''
+        }`;
+    const statusEl = createEl('span', {
+      className: 'refresh-status',
+      textContent: msg,
+    });
+    headerLeft.appendChild(statusEl);
+  }
   header.appendChild(headerLeft);
 
   // Import/Export buttons
@@ -1957,6 +2033,19 @@ function render() {
     onClick: () => showImportModal('onetab'),
     title: 'Import from OneTab text format',
   });
+
+  const missingImages = countMissingImages();
+  const refreshThumbsBtn = createEl('button', {
+    className: 'btn btn-secondary',
+    textContent: state.refreshingImages
+      ? 'Refreshing…'
+      : missingImages
+      ? `Refresh thumbnails (${missingImages})`
+      : 'Refresh thumbnails',
+    onClick: () => refreshMissingImages(),
+    title: 'Fetch thumbnails for links missing images',
+  });
+  refreshThumbsBtn.disabled = state.refreshingImages || missingImages === 0;
 
   const settingsBtn = createEl('button', {
     className: 'btn btn-secondary',
@@ -2000,6 +2089,11 @@ function render() {
   attachTooltip(exportBtn, 'Export', 'Download a JSON backup');
   attachTooltip(importJsonBtn, 'Import JSON', 'Import a LaterList JSON backup');
   attachTooltip(importOnetabBtn, 'Import OneTab', 'Import a OneTab export');
+  attachTooltip(
+    refreshThumbsBtn,
+    'Refresh thumbnails',
+    'Attempt to fetch images for links missing thumbnails'
+  );
   attachTooltip(settingsBtn, 'Settings', 'Open LaterList settings');
   attachTooltip(
     bulkToggleBtn,
@@ -2017,6 +2111,7 @@ function render() {
   toolsDiv.appendChild(exportBtn);
   toolsDiv.appendChild(importJsonBtn);
   toolsDiv.appendChild(importOnetabBtn);
+  toolsDiv.appendChild(refreshThumbsBtn);
   toolsDiv.appendChild(bulkToggleBtn);
   toolsDiv.appendChild(bulkMoveBtn);
   toolsDiv.appendChild(bulkTrashBtn);

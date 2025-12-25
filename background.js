@@ -266,6 +266,112 @@ async function addLink({ url, title, tabId, containerId, imageUrl }) {
   return newLink;
 }
 
+function absolutizeUrl(url, base) {
+  try {
+    return new URL(url, base).toString();
+  } catch {
+    return null;
+  }
+}
+
+function decodeBasicEntities(str) {
+  return str.replace(/&amp;/gi, '&').replace(/&quot;/gi, '"').replace(/&#39;/g, "'");
+}
+
+function extractImageFromHtml(html, pageUrl) {
+  const findAttr = (tag, attr) => {
+    const re = new RegExp(`${attr}\\s*=\\s*"([^"]+)"|${attr}\\s*=\\s*'([^']+)'`, 'i');
+    const m = tag.match(re);
+    return decodeBasicEntities(m?.[1] || m?.[2] || '');
+  };
+
+  const firstMatch = (regex) => {
+    const m = html.match(regex);
+    return m ? m[0] : null;
+  };
+
+  // og:image
+  const ogTag = firstMatch(/<meta[^>]+property=["']og:image["'][^>]*>/i);
+  if (ogTag) {
+    const content = findAttr(ogTag, 'content');
+    const abs = absolutizeUrl(content, pageUrl);
+    if (abs) return abs;
+  }
+
+  // icon
+  const iconTag = firstMatch(/<link[^>]+rel=["'][^"']*icon[^"']*["'][^>]*>/i);
+  if (iconTag) {
+    const href = findAttr(iconTag, 'href');
+    const abs = absolutizeUrl(href, pageUrl);
+    if (abs) return abs;
+  }
+
+  // first img
+  const imgTag = firstMatch(/<img[^>]+src=["'][^"']+["'][^>]*>/i);
+  if (imgTag) {
+    const src = findAttr(imgTag, 'src');
+    const abs = absolutizeUrl(src, pageUrl);
+    if (abs) return abs;
+  }
+
+  return null;
+}
+
+async function fetchImageForPage(url) {
+  try {
+    const res = await fetch(url, { redirect: 'follow', credentials: 'omit' });
+    if (!res.ok) return null;
+    const html = await res.text();
+    return extractImageFromHtml(html, url);
+  } catch (err) {
+    console.warn(
+      '[LaterList Background] fetchImageForPage failed for',
+      url,
+      err
+    );
+  }
+  return null;
+}
+
+async function refreshMissingImages({ limit = 50 } = {}) {
+  const data = await getData();
+
+  const targets = [];
+  data.tabs.forEach(tab => {
+    tab.containers.forEach(container => {
+      container.links.forEach(link => {
+        if (!link.imageUrl) targets.push(link);
+      });
+    });
+  });
+
+  data.trash.forEach(link => {
+    if (!link.imageUrl) targets.push(link);
+  });
+
+  let processed = 0;
+  let updated = 0;
+  const slice = targets.slice(0, limit);
+  for (const link of slice) {
+    processed += 1;
+    const imageUrl = await fetchImageForPage(link.url);
+    if (imageUrl) {
+      link.imageUrl = imageUrl;
+      updated += 1;
+    }
+  }
+
+  if (updated > 0) {
+    await saveData(data);
+  }
+
+  return {
+    processed,
+    updated,
+    remaining: Math.max(0, targets.length - processed),
+  };
+}
+
 function createContextMenus() {
   chrome.contextMenus.removeAll(() => {
     chrome.contextMenus.create({
@@ -327,6 +433,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === 'laterlist:sendAllTabs') {
     sendAllBrowserTabsToLaterList()
       .then(result => sendResponse(result))
+      .catch(err => sendResponse({ success: false, error: err?.message }));
+    return true;
+  }
+  if (message?.type === 'laterlist:refreshImages') {
+    refreshMissingImages(message.payload || {})
+      .then(result => sendResponse({ success: true, result }))
       .catch(err => sendResponse({ success: false, error: err?.message }));
     return true;
   }

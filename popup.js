@@ -155,6 +155,9 @@ async function saveToSelection({ closeTabAfterSave }) {
       return;
     }
 
+    // Notify view.html to refresh
+    await chrome.runtime.sendMessage({ type: 'laterlist:updateView' });
+
     if (closeTabAfterSave) {
       const tabIdToClose =
         typeof currentPage.tabId === 'number'
@@ -196,6 +199,9 @@ async function sendAllTabs() {
     });
 
     if (result?.success) {
+      // Notify view.html to refresh
+      await chrome.runtime.sendMessage({ type: 'laterlist:updateView' });
+
       setStatus(`✓ ${result.count} tabs saved to "${result.containerName}"`);
       // Close popup after a brief delay
       setTimeout(() => window.close(), 1500);

@@ -2049,6 +2049,13 @@ async function init() {
 
 document.addEventListener('DOMContentLoaded', init);
 
+// Listen for messages to update the view when a link is saved
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === 'laterlist:updateView') {
+    loadData().then(() => render());
+  }
+});
+
 function initSortable(rootEl) {
   if (!window.Sortable) return;
   if (!rootEl) return;

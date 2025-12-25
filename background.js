@@ -298,6 +298,11 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   const title = info.selectionText || tab?.title || url;
   if (!url) return;
   await addLink({ url, title });
+
+  // Notify view.html to refresh
+  chrome.runtime.sendMessage({ type: 'laterlist:updateView' }).catch(() => {
+    // Ignore errors if view.html is not open
+  });
 });
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -333,6 +338,13 @@ chrome.commands.onCommand.addListener(command => {
   if (command === 'send-all-tabs') {
     sendAllBrowserTabsToLaterList().then(result => {
       if (result.success) {
+        // Notify view.html to refresh
+        chrome.runtime
+          .sendMessage({ type: 'laterlist:updateView' })
+          .catch(() => {
+            // Ignore errors if view.html is not open
+          });
+
         chrome.notifications.create({
           type: 'basic',
           iconUrl: 'icon.png',

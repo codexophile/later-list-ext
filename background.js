@@ -711,12 +711,26 @@ async function extractFromTab(tabId) {
           'meta[name="twitter:image"]',
           'meta[name="twitter:image:src"]',
         ];
+        const isBlockedMeta = url => {
+          const lowered = url.trim().toLowerCase();
+          const pattern = /logo|icon|sprite|favicon|social|share/;
+          if (pattern.test(lowered)) return true;
+          try {
+            const parsed = new URL(url, location.href);
+            const path = parsed.pathname.toLowerCase();
+            if (path.includes('favicon')) return true;
+            const file = path.split('/').pop() || '';
+            return pattern.test(file);
+          } catch {
+            return false;
+          }
+        };
         const metaUrls = [];
         metaSelectors.forEach(sel => {
           const el = document.querySelector(sel);
           if (el?.content) {
             const val = el.content.trim();
-            if (!seen.has(val) && !isSvg(val)) {
+            if (!seen.has(val) && !isSvg(val) && !isBlockedMeta(val)) {
               metaUrls.push(val);
             }
           }

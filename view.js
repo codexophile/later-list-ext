@@ -747,7 +747,8 @@ function normalizeUrl(url) {
 
     const path = u.pathname.replace(/\/+$/, '');
     const query = params.toString();
-    const hash = u.hash;
+    // Ignore special slot fragments (e.g., #slot=71) for duplicate detection
+    const hash = /^#slot=\d+$/.test(u.hash) ? '' : u.hash;
     const base = `${u.protocol}//${u.host}${path || '/'}`;
     return (query ? `${base}?${query}${hash}` : `${base}${hash}`).toLowerCase();
   } catch {

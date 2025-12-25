@@ -272,6 +272,32 @@ function buildDetailContent(linkData) {
   content += `<div class="status-overlay-value">${linkData.url}</div>`;
   content += `</div>`;
 
+  if (linkData.description) {
+    content += `<div class="status-overlay-section">`;
+    content += `<div class="status-overlay-label">Description</div>`;
+    content += `<div class="status-overlay-value">${linkData.description}</div>`;
+    content += `</div>`;
+  }
+
+  if (linkData.summary) {
+    content += `<div class="status-overlay-section">`;
+    content += `<div class="status-overlay-label">Summary</div>`;
+    content += `<div class="status-overlay-value">${linkData.summary}</div>`;
+    content += `</div>`;
+  }
+
+  if (linkData.publishedAt) {
+    content += `<div class="status-overlay-section">`;
+    content += `<div class="status-overlay-label">Published</div>`;
+    content += `<div class="status-overlay-value">${formatDate(
+      linkData.publishedAt
+    )}</div>`;
+    content += `<div class="status-overlay-relative">${formatRelativeTime(
+      linkData.publishedAt
+    )}</div>`;
+    content += `</div>`;
+  }
+
   if (linkData.savedAt) {
     content += `<div class="status-overlay-section">`;
     content += `<div class="status-overlay-label">Added</div>`;
@@ -302,6 +328,17 @@ function buildDetailContent(linkData) {
     content += `<div class="status-overlay-value">${linkData.tabName || ''}${
       linkData.tabName && linkData.containerName ? ' › ' : ''
     }${linkData.containerName || ''}</div>`;
+    content += `</div>`;
+  }
+
+  if (linkData.keywords && linkData.keywords.length > 0) {
+    content += `<div class="status-overlay-section">`;
+    content += `<div class="status-overlay-label">Keywords</div>`;
+    content += `<div class="status-overlay-tags">`;
+    linkData.keywords.forEach(kw => {
+      content += `<span class="status-overlay-tag">${kw}</span>`;
+    });
+    content += `</div>`;
     content += `</div>`;
   }
 

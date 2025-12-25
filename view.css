@@ -855,6 +855,23 @@ h1 {
   max-height: 60vh;
 }
 
+.status-overlay-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.status-overlay-tag {
+  display: inline-block;
+  padding: 4px 10px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
 .duplicate-id {
   border: 2px solid purple;
   background-color: #ffcccc;

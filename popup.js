@@ -161,6 +161,170 @@ async function saveToSelection({ closeTabAfterSave }) {
       }
     }
 
+    // Extract metadata from the current tab
+    let publishedAt = null;
+    let description = null;
+    let summary = null;
+    let keywords = null;
+    if (typeof currentPage.tabId === 'number') {
+      try {
+        const metaResults = await chrome.scripting.executeScript({
+          target: { tabId: currentPage.tabId },
+          function: () => {
+            const extractJsonLd = () => {
+              const scripts = document.querySelectorAll(
+                'script[type="application/ld+json"]'
+              );
+              for (const script of scripts) {
+                try {
+                  const data = JSON.parse(script.textContent);
+                  if (data) return Array.isArray(data) ? data[0] : data;
+                } catch {}
+              }
+              return null;
+            };
+
+            const extractPublishedDate = () => {
+              const jsonLd = extractJsonLd();
+              if (jsonLd?.datePublished)
+                return new Date(jsonLd.datePublished).getTime();
+
+              const metaSelectors = [
+                'meta[property="article:published_time"]',
+                'meta[name="publish_date"]',
+                'meta[name="date"]',
+                'meta[property="og:published_time"]',
+              ];
+
+              for (const sel of metaSelectors) {
+                const el = document.querySelector(sel);
+                const content = el?.getAttribute('content');
+                if (content) {
+                  const timestamp = new Date(content).getTime();
+                  if (!isNaN(timestamp)) return timestamp;
+                }
+              }
+
+              return null;
+            };
+
+            const extractDescription = () => {
+              const jsonLd = extractJsonLd();
+              if (jsonLd?.description) return jsonLd.description.trim();
+
+              const metaSelectors = [
+                'meta[property="og:description"]',
+                'meta[name="description"]',
+                'meta[name="twitter:description"]',
+              ];
+
+              for (const sel of metaSelectors) {
+                const el = document.querySelector(sel);
+                const content = el?.getAttribute('content');
+                if (content) return content.trim();
+              }
+
+              const firstP = document.querySelector('article p, main p, p');
+              if (firstP?.textContent) {
+                const text = firstP.textContent.trim();
+                return text.length > 300 ? text.slice(0, 300) + '...' : text;
+              }
+
+              return null;
+            };
+
+            const extractSummary = () => {
+              const selectors = [
+                'article',
+                'main',
+                '[role="main"]',
+                '.article-content',
+                '.post-content',
+                '.entry-content',
+              ];
+
+              for (const sel of selectors) {
+                const el = document.querySelector(sel);
+                if (el) {
+                  const text = el.innerText || el.textContent || '';
+                  const cleaned = text.trim().replace(/\\s+/g, ' ');
+                  if (cleaned.length > 50) {
+                    return cleaned.length > 500
+                      ? cleaned.slice(0, 500) + '...'
+                      : cleaned;
+                  }
+                }
+              }
+
+              return null;
+            };
+
+            const extractKeywords = () => {
+              const keywords = [];
+              const seen = new Set();
+
+              const jsonLd = extractJsonLd();
+              if (jsonLd?.keywords) {
+                const kw = Array.isArray(jsonLd.keywords)
+                  ? jsonLd.keywords
+                  : jsonLd.keywords.split(',');
+                kw.forEach(k => {
+                  const cleaned = k.trim();
+                  if (cleaned && !seen.has(cleaned)) {
+                    seen.add(cleaned);
+                    keywords.push(cleaned);
+                  }
+                });
+              }
+
+              const metaKeywords = document.querySelector(
+                'meta[name="keywords"]'
+              );
+              if (metaKeywords) {
+                const content = metaKeywords.getAttribute('content') || '';
+                content.split(',').forEach(k => {
+                  const cleaned = k.trim();
+                  if (cleaned && !seen.has(cleaned)) {
+                    seen.add(cleaned);
+                    keywords.push(cleaned);
+                  }
+                });
+              }
+
+              const metaTags = document.querySelectorAll(
+                'meta[property="article:tag"]'
+              );
+              metaTags.forEach(tag => {
+                const content = tag.getAttribute('content');
+                if (content && !seen.has(content)) {
+                  seen.add(content);
+                  keywords.push(content);
+                }
+              });
+
+              return keywords.length > 0 ? keywords : null;
+            };
+
+            return {
+              publishedAt: extractPublishedDate(),
+              description: extractDescription(),
+              summary: extractSummary(),
+              keywords: extractKeywords(),
+            };
+          },
+        });
+
+        const meta = metaResults?.[0]?.result || {};
+        publishedAt = meta.publishedAt;
+        description = meta.description;
+        summary = meta.summary;
+        keywords = meta.keywords;
+        console.log('[LaterList] Extracted metadata:', meta);
+      } catch (error) {
+        console.log('[LaterList] Metadata extraction failed:', error);
+      }
+    }
+
     const result = await chrome.runtime.sendMessage({
       type: 'laterlist:addLink',
       payload: {
@@ -170,6 +334,10 @@ async function saveToSelection({ closeTabAfterSave }) {
         containerId,
         imageUrl,
         imageUrls,
+        publishedAt,
+        description,
+        summary,
+        keywords,
       },
     });
 

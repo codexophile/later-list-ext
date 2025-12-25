@@ -233,6 +233,10 @@ async function addLink({
   containerId,
   imageUrl,
   imageUrls,
+  publishedAt,
+  description,
+  summary,
+  keywords,
 }) {
   console.log('[LaterList Background] addLink called with:', {
     url,
@@ -241,6 +245,10 @@ async function addLink({
     containerId,
     imageUrl,
     imageUrls,
+    publishedAt,
+    description,
+    summary,
+    keywords,
   });
 
   const data = await getData();
@@ -270,6 +278,11 @@ async function addLink({
     imageUrl: primaryImage || undefined,
     imageUrls: normalizedImages,
   };
+
+  if (publishedAt) newLink.publishedAt = publishedAt;
+  if (description) newLink.description = description;
+  if (summary) newLink.summary = summary;
+  if (keywords) newLink.keywords = keywords;
 
   if (primaryImage) {
     console.log('[LaterList Background] Image URL saved:', primaryImage);

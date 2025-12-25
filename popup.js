@@ -18,11 +18,15 @@ function setBusy(isBusy) {
   const saveCloseBtn = document.getElementById('save-close');
   const openBtn = document.getElementById('open-view');
   const sendAllBtn = document.getElementById('send-all-tabs');
+  const sendBeforeBtn = document.getElementById('send-tabs-before');
+  const sendAfterBtn = document.getElementById('send-tabs-after');
   const settingsBtn = document.getElementById('open-settings');
   if (saveBtn) saveBtn.disabled = isBusy;
   if (saveCloseBtn) saveCloseBtn.disabled = isBusy;
   if (openBtn) openBtn.disabled = isBusy;
   if (sendAllBtn) sendAllBtn.disabled = isBusy;
+  if (sendBeforeBtn) sendBeforeBtn.disabled = isBusy;
+  if (sendAfterBtn) sendAfterBtn.disabled = isBusy;
   if (settingsBtn) settingsBtn.disabled = isBusy;
 }
 
@@ -455,6 +459,41 @@ async function sendAllTabs() {
   }
 }
 
+async function sendTabsAround(direction) {
+  setBusy(true);
+  const dirText = direction === 'before' ? 'Tabs before...' : 'Tabs after...';
+  setStatus(dirText);
+
+  try {
+    const messageType =
+      direction === 'before'
+        ? 'laterlist:sendTabsBefore'
+        : 'laterlist:sendTabsAfter';
+    const result = await chrome.runtime.sendMessage({
+      type: messageType,
+    });
+
+    if (result?.success) {
+      // Notify view.html to refresh
+      await chrome.runtime.sendMessage({ type: 'laterlist:updateView' });
+
+      const dirLabel =
+        direction === 'before' ? 'before current' : 'after current';
+      setStatus(
+        `✓ ${result.count} tabs ${dirLabel} saved to "${result.containerName}"`
+      );
+      // Close popup after a brief delay
+      setTimeout(() => window.close(), 1500);
+    } else {
+      setStatus(result?.error || 'Failed to send tabs');
+    }
+  } catch (err) {
+    setStatus('Error: ' + (err.message || 'Unknown error'));
+  } finally {
+    setBusy(false);
+  }
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
   async function updateLinkCount() {
     const response = await chrome.runtime.sendMessage({
@@ -497,6 +536,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   document
     .getElementById('send-all-tabs')
     ?.addEventListener('click', sendAllTabs);
+
+  document
+    .getElementById('send-tabs-before')
+    ?.addEventListener('click', () => sendTabsAround('before'));
+
+  document
+    .getElementById('send-tabs-after')
+    ?.addEventListener('click', () => sendTabsAround('after'));
 
   document.getElementById('open-settings')?.addEventListener('click', () => {
     chrome.tabs.create({ url: 'settings.html' });

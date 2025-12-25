@@ -221,6 +221,178 @@ async function sendAllBrowserTabsToLaterList() {
   }
 }
 
+async function sendTabsAroundCurrentTab(direction) {
+  try {
+    // Get active tab in current window
+    const [activeTab] = await chrome.tabs.query({
+      active: true,
+      currentWindow: true,
+    });
+
+    if (!activeTab || activeTab.id === undefined) {
+      return {
+        success: false,
+        error: 'No active tab found',
+      };
+    }
+
+    // Get all tabs in the current window
+    const windowTabs = await chrome.tabs.query({
+      windowId: activeTab.windowId,
+    });
+
+    if (windowTabs.length === 0) {
+      return {
+        success: false,
+        error: 'No tabs found in current window',
+      };
+    }
+
+    // Get the view.html URL to filter it out
+    const viewUrl = chrome.runtime.getURL('view.html');
+
+    // Find active tab index
+    const activeTabIndex = windowTabs.findIndex(t => t.id === activeTab.id);
+
+    // Filter tabs based on direction
+    let tabsToSave;
+    if (direction === 'before') {
+      // All tabs BEFORE the active tab
+      tabsToSave = windowTabs.slice(0, activeTabIndex);
+    } else if (direction === 'after') {
+      // All tabs AFTER the active tab
+      tabsToSave = windowTabs.slice(activeTabIndex + 1);
+    } else {
+      return {
+        success: false,
+        error: 'Invalid direction',
+      };
+    }
+
+    // Filter: exclude pinned tabs and view.html
+    tabsToSave = tabsToSave.filter(
+      tab =>
+        !tab.pinned &&
+        !tab.url.includes('view.html') &&
+        !tab.url.startsWith(viewUrl)
+    );
+
+    if (tabsToSave.length === 0) {
+      const directionText =
+        direction === 'before' ? 'to the left' : 'to the right';
+      return {
+        success: false,
+        error: `No tabs to save ${directionText} (all are pinned or excluded)`,
+      };
+    }
+
+    // Get settings and data
+    const settings = await getSettings();
+    const data = await getData();
+
+    // Determine destination tab
+    let targetTab;
+    if (settings.sendAllTabsDestination) {
+      targetTab = data.tabs.find(t => t.id === settings.sendAllTabsDestination);
+    }
+    if (!targetTab) {
+      targetTab = ensureTab(data, null); // Use first tab as fallback
+    }
+
+    // Create new container with formatted name
+    const containerName = formatContainerName(
+      new Date(),
+      settings.containerNameFormat
+    );
+    const newContainer = {
+      id: `container-${Date.now()}`,
+      name: containerName,
+      links: [],
+    };
+
+    // Convert browser tabs to links
+    const savedTabIds = [];
+    for (const tab of tabsToSave) {
+      if (tab.url && tab.id !== undefined) {
+        const link = {
+          id: `link-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+          title: tab.title || tab.url,
+          url: tab.url,
+          savedAt: Date.now(),
+        };
+
+        // Extract images and metadata if possible
+        if (typeof tab.id === 'number') {
+          try {
+            const extracted = await extractFromTab(tab.id);
+            if (extracted.imageUrls?.length > 0) {
+              link.imageUrls = extracted.imageUrls;
+              link.imageUrl = extracted.imageUrl;
+            }
+            if (extracted.publishedAt) link.publishedAt = extracted.publishedAt;
+            if (extracted.description) link.description = extracted.description;
+            if (extracted.summary) link.summary = extracted.summary;
+            if (extracted.keywords) link.keywords = extracted.keywords;
+          } catch (err) {
+            console.warn(
+              '[LaterList] Extraction failed for tab:',
+              tab.url,
+              err
+            );
+          }
+        }
+
+        newContainer.links.push(link);
+        savedTabIds.push(tab.id);
+      }
+    }
+
+    // Add container to the BEGINNING of the target tab
+    targetTab.containers.unshift(newContainer);
+
+    // Save data
+    await saveData(data);
+
+    // Close successfully saved tabs
+    if (savedTabIds.length > 0) {
+      try {
+        await chrome.tabs.remove(savedTabIds);
+      } catch (err) {
+        console.warn('Some tabs could not be closed:', err);
+      }
+    }
+
+    // Open or activate view.html and reload it
+    try {
+      const viewTabs = await chrome.tabs.query({ url: viewUrl });
+      if (viewTabs.length > 0) {
+        // View tab exists, activate and reload it
+        await chrome.tabs.update(viewTabs[0].id, { active: true });
+        await chrome.tabs.reload(viewTabs[0].id);
+      } else {
+        // Open new view tab
+        await chrome.tabs.create({ url: 'view.html', active: true });
+      }
+    } catch (err) {
+      console.warn('Could not open/reload view.html:', err);
+    }
+
+    return {
+      success: true,
+      count: savedTabIds.length,
+      containerName,
+      targetTabName: targetTab.name,
+      direction,
+    };
+  } catch (err) {
+    console.error('Error sending tabs:', err);
+    return {
+      success: false,
+      error: err.message || 'Unknown error',
+    };
+  }
+}
+
 function ensureTab(data, tabId) {
   if (!data.tabs.length) {
     data.tabs.push({
@@ -757,6 +929,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .catch(err => sendResponse({ success: false, error: err?.message }));
     return true;
   }
+  if (message?.type === 'laterlist:sendTabsBefore') {
+    sendTabsAroundCurrentTab('before')
+      .then(result => sendResponse(result))
+      .catch(err => sendResponse({ success: false, error: err?.message }));
+    return true;
+  }
+  if (message?.type === 'laterlist:sendTabsAfter') {
+    sendTabsAroundCurrentTab('after')
+      .then(result => sendResponse(result))
+      .catch(err => sendResponse({ success: false, error: err?.message }));
+    return true;
+  }
   if (message?.type === 'laterlist:refreshImages') {
     refreshMissingImages(message.payload || {})
       .then(result => sendResponse({ success: true, result }))
@@ -768,30 +952,40 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 // Keyboard command handler
 chrome.commands.onCommand.addListener(command => {
+  const showNotification = (result, prefix = '') => {
+    if (result.success) {
+      // Notify view.html to refresh
+      chrome.runtime.sendMessage({ type: 'laterlist:updateView' }).catch(() => {
+        // Ignore errors if view.html is not open
+      });
+
+      chrome.notifications.create({
+        type: 'basic',
+        iconUrl: 'icon.png',
+        title: 'LaterList',
+        message: `${prefix}${result.count} tabs saved to "${result.containerName}"`,
+      });
+    } else {
+      chrome.notifications.create({
+        type: 'basic',
+        iconUrl: 'icon.png',
+        title: 'LaterList Error',
+        message: result.error || 'Failed to save tabs',
+      });
+    }
+  };
+
   if (command === 'send-all-tabs') {
     sendAllBrowserTabsToLaterList().then(result => {
-      if (result.success) {
-        // Notify view.html to refresh
-        chrome.runtime
-          .sendMessage({ type: 'laterlist:updateView' })
-          .catch(() => {
-            // Ignore errors if view.html is not open
-          });
-
-        chrome.notifications.create({
-          type: 'basic',
-          iconUrl: 'icon.png',
-          title: 'LaterList',
-          message: `${result.count} tabs saved to "${result.containerName}"`,
-        });
-      } else {
-        chrome.notifications.create({
-          type: 'basic',
-          iconUrl: 'icon.png',
-          title: 'LaterList Error',
-          message: result.error || 'Failed to save tabs',
-        });
-      }
+      showNotification(result);
+    });
+  } else if (command === 'send-tabs-before') {
+    sendTabsAroundCurrentTab('before').then(result => {
+      showNotification(result, 'Tabs before: ');
+    });
+  } else if (command === 'send-tabs-after') {
+    sendTabsAroundCurrentTab('after').then(result => {
+      showNotification(result, 'Tabs after: ');
     });
   }
 });

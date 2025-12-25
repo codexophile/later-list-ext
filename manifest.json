@@ -46,6 +46,20 @@
         "mac": "Command+Shift+S"
       },
       "description": "Send all browser tabs to LaterList"
+    },
+    "send-tabs-before": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+Left",
+        "mac": "Command+Shift+Left"
+      },
+      "description": "Send all tabs before current tab"
+    },
+    "send-tabs-after": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+Right",
+        "mac": "Command+Shift+Right"
+      },
+      "description": "Send all tabs after current tab"
     }
   },
   "content_security_policy": {

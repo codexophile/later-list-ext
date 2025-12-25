@@ -746,10 +746,28 @@ h1 {
 .link-locked {
   background: linear-gradient(
     90deg,
-    rgba(99, 102, 241, 0.05) 0%,
-    transparent 100%
-  );
-  border-left: 3px solid var(--accent);
+    rgba(99, 102, 241, 0.08) 0%,
+    rgba(99, 102, 241, 0.02) 100%
+  ) !important;
+  border-left: 3px solid var(--accent) !important;
+  padding-left: 32px !important;
+  position: relative;
+}
+
+.link-locked::before {
+  content: '🔒︎'; /* emoji with VS15 forces text (black/white) presentation */
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  opacity: 0.7;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--accent);
+}
+
+.link-locked:hover::before {
+  opacity: 1;
 }
 
 .btn-primary {

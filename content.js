@@ -224,21 +224,56 @@
     return keywords.length > 0 ? keywords : null;
   }
 
+  // Validate if an image URL is loadable
+  function testImageUrl(url, timeout = 3000) {
+    return new Promise(resolve => {
+      const img = new Image();
+      const timer = setTimeout(() => {
+        img.onload = null;
+        img.onerror = null;
+        resolve(false);
+      }, timeout);
+
+      img.onload = () => {
+        clearTimeout(timer);
+        // Check if image actually has dimensions
+        resolve(img.naturalWidth > 0 && img.naturalHeight > 0);
+      };
+
+      img.onerror = () => {
+        clearTimeout(timer);
+        resolve(false);
+      };
+
+      img.src = url;
+    });
+  }
+
   // Extract multiple meaningful images from the page
   async function extractPageImages() {
     try {
-      const urls = [];
+      const candidates = [];
       const seen = new Set();
 
       const add = url => {
         if (!url) return;
         const trimmed = url.trim();
         if (!trimmed || seen.has(trimmed)) return;
+        // Filter out obviously invalid URLs
+        if (
+          trimmed.startsWith('data:') ||
+          trimmed.startsWith('about:') ||
+          trimmed.startsWith('javascript:')
+        )
+          return;
         seen.add(trimmed);
-        urls.push(trimmed);
+        candidates.push(trimmed);
       };
 
       const visibleEnough = img => {
+        // Check if image actually loaded successfully
+        if (!img.complete || img.naturalWidth === 0 || img.naturalHeight === 0)
+          return false;
         const w = img.naturalWidth || img.width || 0;
         const h = img.naturalHeight || img.height || 0;
         if (w < 128 || h < 128) return false;
@@ -246,29 +281,45 @@
         return ratio > 0.3 && ratio < 3.5 && img.offsetParent !== null;
       };
 
-      // Meta tags first (highest priority)
-      const metaSelectors = [
-        'meta[property="og:image"]',
-        'meta[name="twitter:image"]',
-        'meta[name="twitter:image:src"]',
-      ];
-      metaSelectors.forEach(sel => {
-        const el = document.querySelector(sel);
-        if (el?.content) add(el.content);
-      });
-
-      // Icons
-      const icon = document.querySelector('link[rel*="icon"]');
-      if (icon?.href) add(icon.href);
-
-      // Visible, reasonably large images in the page
+      // Visible, reasonably large images in the page (already loaded)
       document.querySelectorAll('img').forEach(img => {
         if (!visibleEnough(img)) return;
         const src = img.currentSrc || img.src || img.getAttribute('data-src');
         add(src);
       });
 
-      return urls;
+      // Meta tags (need validation since they might not be loaded)
+      const metaSelectors = [
+        'meta[property="og:image"]',
+        'meta[name="twitter:image"]',
+        'meta[name="twitter:image:src"]',
+      ];
+      const metaUrls = [];
+      metaSelectors.forEach(sel => {
+        const el = document.querySelector(sel);
+        if (el?.content && !seen.has(el.content.trim())) {
+          metaUrls.push(el.content.trim());
+        }
+      });
+
+      // Icons
+      const icon = document.querySelector('link[rel*="icon"]');
+      if (icon?.href && !seen.has(icon.href)) {
+        metaUrls.push(icon.href);
+      }
+
+      // Validate meta tag images (check if they actually load)
+      const validationPromises = metaUrls.map(async url => {
+        const isValid = await testImageUrl(url);
+        return isValid ? url : null;
+      });
+
+      const validatedMeta = (await Promise.all(validationPromises)).filter(
+        Boolean
+      );
+
+      // Prepend validated meta images (higher priority)
+      return [...validatedMeta, ...candidates];
     } catch {
       return [];
     }

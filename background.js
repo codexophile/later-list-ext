@@ -275,17 +275,23 @@ function absolutizeUrl(url, base) {
 }
 
 function decodeBasicEntities(str) {
-  return str.replace(/&amp;/gi, '&').replace(/&quot;/gi, '"').replace(/&#39;/g, "'");
+  return str
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/g, "'");
 }
 
 function extractImageFromHtml(html, pageUrl) {
   const findAttr = (tag, attr) => {
-    const re = new RegExp(`${attr}\\s*=\\s*"([^"]+)"|${attr}\\s*=\\s*'([^']+)'`, 'i');
+    const re = new RegExp(
+      `${attr}\\s*=\\s*"([^"]+)"|${attr}\\s*=\\s*'([^']+)'`,
+      'i'
+    );
     const m = tag.match(re);
     return decodeBasicEntities(m?.[1] || m?.[2] || '');
   };
 
-  const firstMatch = (regex) => {
+  const firstMatch = regex => {
     const m = html.match(regex);
     return m ? m[0] : null;
   };

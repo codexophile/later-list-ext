@@ -228,6 +228,7 @@
   function testImageUrl(url, timeout = 3000) {
     return new Promise(resolve => {
       const img = new Image();
+      const MIN_DIM = 128;
       const timer = setTimeout(() => {
         img.onload = null;
         img.onerror = null;
@@ -236,8 +237,7 @@
 
       img.onload = () => {
         clearTimeout(timer);
-        // Check if image actually has dimensions
-        resolve(img.naturalWidth > 0 && img.naturalHeight > 0);
+        resolve(img.naturalWidth >= MIN_DIM && img.naturalHeight >= MIN_DIM);
       };
 
       img.onerror = () => {
@@ -287,9 +287,26 @@
         return ratio > 0.3 && ratio < 3.5 && img.offsetParent !== null;
       };
 
+      const isInExcludedContext = img => {
+        const selectors = [
+          'nav',
+          'header',
+          'footer',
+          'aside',
+          'form',
+          'button',
+          '[role="navigation"]',
+          '[role="banner"]',
+          '[role="contentinfo"]',
+          '[aria-label*="breadcrumb" i]',
+        ];
+        return Boolean(img.closest(selectors.join(',')));
+      };
+
       // Visible, reasonably large images in the page (already loaded)
       document.querySelectorAll('img').forEach(img => {
         if (!visibleEnough(img)) return;
+        if (isInExcludedContext(img)) return;
         const src = img.currentSrc || img.src || img.getAttribute('data-src');
         add(src);
       });

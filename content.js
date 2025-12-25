@@ -92,36 +92,53 @@
     window.removeEventListener('keydown', handleKeydown, true);
   }
 
-  // Extract image from page: try og:image, then favicon, then first large image
-  async function extractPageImage() {
+  // Extract multiple meaningful images from the page
+  async function extractPageImages() {
     try {
-      // Try Open Graph image first
-      const ogImage = document.querySelector('meta[property="og:image"]');
-      if (ogImage?.content) {
-        return ogImage.content;
-      }
+      const urls = [];
+      const seen = new Set();
 
-      // Try favicon
-      const favicon = document.querySelector('link[rel*="icon"]');
-      if (favicon?.href) {
-        return favicon.href;
-      }
+      const add = url => {
+        if (!url) return;
+        const trimmed = url.trim();
+        if (!trimmed || seen.has(trimmed)) return;
+        seen.add(trimmed);
+        urls.push(trimmed);
+      };
 
-      // Try first image on page that's reasonably sized
-      const images = document.querySelectorAll('img');
-      for (const img of images) {
-        if (
-          img.naturalWidth >= 100 &&
-          img.naturalHeight >= 100 &&
-          img.offsetParent !== null
-        ) {
-          return img.src;
-        }
-      }
+      const visibleEnough = img => {
+        const w = img.naturalWidth || img.width || 0;
+        const h = img.naturalHeight || img.height || 0;
+        if (w < 128 || h < 128) return false;
+        const ratio = w / h;
+        return ratio > 0.3 && ratio < 3.5 && img.offsetParent !== null;
+      };
 
-      return null;
+      // Meta tags first (highest priority)
+      const metaSelectors = [
+        'meta[property="og:image"]',
+        'meta[name="twitter:image"]',
+        'meta[name="twitter:image:src"]',
+      ];
+      metaSelectors.forEach(sel => {
+        const el = document.querySelector(sel);
+        if (el?.content) add(el.content);
+      });
+
+      // Icons
+      const icon = document.querySelector('link[rel*="icon"]');
+      if (icon?.href) add(icon.href);
+
+      // Visible, reasonably large images in the page
+      document.querySelectorAll('img').forEach(img => {
+        if (!visibleEnough(img)) return;
+        const src = img.currentSrc || img.src || img.getAttribute('data-src');
+        add(src);
+      });
+
+      return urls;
     } catch {
-      return null;
+      return [];
     }
   }
 
@@ -211,7 +228,8 @@
       'laterlist-popup__button laterlist-popup__button--primary';
     saveBtn.textContent = 'Save';
     saveBtn.addEventListener('click', async () => {
-      const imageUrl = await extractPageImage();
+      const imageUrls = await extractPageImages();
+      const imageUrl = imageUrls[0] || null;
       await chrome.runtime.sendMessage({
         type: 'laterlist:addLink',
         payload: {
@@ -220,6 +238,7 @@
           tabId: tabSelect.value,
           containerId: containerSelect.value,
           imageUrl,
+          imageUrls,
         },
       });
       removePopup();

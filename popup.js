@@ -101,40 +101,62 @@ async function saveToSelection({ closeTabAfterSave }) {
 
   setBusy(true);
   try {
-    // Extract image from the current tab
+    // Extract images from the current tab
+    let imageUrls = [];
     let imageUrl = null;
     if (typeof currentPage.tabId === 'number') {
       try {
         const results = await chrome.scripting.executeScript({
           target: { tabId: currentPage.tabId },
           function: () => {
-            // Try Open Graph image first
-            const ogImage = document.querySelector('meta[property="og:image"]');
-            if (ogImage?.content) return ogImage.content;
+            const urls = [];
+            const seen = new Set();
+            const add = url => {
+              if (!url) return;
+              const trimmed = url.trim();
+              if (!trimmed || seen.has(trimmed)) return;
+              seen.add(trimmed);
+              urls.push(trimmed);
+            };
 
-            // Try favicon
-            const favicon = document.querySelector('link[rel*="icon"]');
-            if (favicon?.href) return favicon.href;
+            const visibleEnough = img => {
+              const w = img.naturalWidth || img.width || 0;
+              const h = img.naturalHeight || img.height || 0;
+              if (w < 128 || h < 128) return false;
+              const ratio = w / h;
+              return ratio > 0.3 && ratio < 3.5 && img.offsetParent !== null;
+            };
 
-            // Try first image on page
-            const images = document.querySelectorAll('img');
-            for (const img of images) {
-              if (
-                img.naturalWidth >= 100 &&
-                img.naturalHeight >= 100 &&
-                img.offsetParent !== null
-              ) {
-                return img.src;
-              }
-            }
-            return null;
+            const metaSelectors = [
+              'meta[property="og:image"]',
+              'meta[name="twitter:image"]',
+              'meta[name="twitter:image:src"]',
+            ];
+            metaSelectors.forEach(sel => {
+              const el = document.querySelector(sel);
+              if (el?.content) add(el.content);
+            });
+
+            const icon = document.querySelector('link[rel*="icon"]');
+            if (icon?.href) add(icon.href);
+
+            document.querySelectorAll('img').forEach(img => {
+              if (!visibleEnough(img)) return;
+              const src =
+                img.currentSrc || img.src || img.getAttribute('data-src');
+              add(src);
+            });
+
+            return urls;
           },
         });
-        imageUrl = results?.[0]?.result || null;
-        console.log('[LaterList] Extracted image URL:', imageUrl);
+        imageUrls = results?.[0]?.result || [];
+        imageUrl = imageUrls[0] || null;
+        console.log('[LaterList] Extracted image URLs:', imageUrls);
       } catch (error) {
-        // If extraction fails, continue without image
+        // If extraction fails, continue without images
         console.log('[LaterList] Image extraction failed:', error);
+        imageUrls = [];
         imageUrl = null;
       }
     }
@@ -147,6 +169,7 @@ async function saveToSelection({ closeTabAfterSave }) {
         tabId,
         containerId,
         imageUrl,
+        imageUrls,
       },
     });
 

@@ -226,13 +226,21 @@ function ensureContainerInTab(tab) {
   return tab.containers[0];
 }
 
-async function addLink({ url, title, tabId, containerId, imageUrl }) {
+async function addLink({
+  url,
+  title,
+  tabId,
+  containerId,
+  imageUrl,
+  imageUrls,
+}) {
   console.log('[LaterList Background] addLink called with:', {
     url,
     title,
     tabId,
     containerId,
     imageUrl,
+    imageUrls,
   });
 
   const data = await getData();
@@ -246,16 +254,25 @@ async function addLink({ url, title, tabId, containerId, imageUrl }) {
     container = ensureContainerInTab(tab);
   }
 
+  const normalizedImages = Array.isArray(imageUrls)
+    ? imageUrls.filter(Boolean)
+    : [];
+  const primaryImage = imageUrl || normalizedImages[0] || null;
+  if (primaryImage && !normalizedImages.length) {
+    normalizedImages.push(primaryImage);
+  }
+
   const newLink = {
     id: `link-${Date.now()}`,
     title: title || url,
     url,
     savedAt: Date.now(),
+    imageUrl: primaryImage || undefined,
+    imageUrls: normalizedImages,
   };
 
-  if (imageUrl) {
-    newLink.imageUrl = imageUrl;
-    console.log('[LaterList Background] Image URL saved:', imageUrl);
+  if (primaryImage) {
+    console.log('[LaterList Background] Image URL saved:', primaryImage);
   } else {
     console.log('[LaterList Background] No image URL provided');
   }
@@ -326,9 +343,9 @@ function extractImageFromHtml(html, pageUrl) {
 async function fetchImageForPage(url) {
   try {
     const res = await fetch(url, { redirect: 'follow', credentials: 'omit' });
-    if (!res.ok) return null;
+    if (!res.ok) return [];
     const html = await res.text();
-    return extractImageFromHtml(html, url);
+    return extractImagesFromHtml(html, url);
   } catch (err) {
     console.warn(
       '[LaterList Background] fetchImageForPage failed for',
@@ -336,7 +353,7 @@ async function fetchImageForPage(url) {
       err
     );
   }
-  return null;
+  return [];
 }
 
 async function refreshMissingImages({ limit = 50 } = {}) {
@@ -346,13 +363,13 @@ async function refreshMissingImages({ limit = 50 } = {}) {
   data.tabs.forEach(tab => {
     tab.containers.forEach(container => {
       container.links.forEach(link => {
-        if (!link.imageUrl) targets.push(link);
+        if (!link.imageUrl && !link.imageUrls?.length) targets.push(link);
       });
     });
   });
 
   data.trash.forEach(link => {
-    if (!link.imageUrl) targets.push(link);
+    if (!link.imageUrl && !link.imageUrls?.length) targets.push(link);
   });
 
   let processed = 0;
@@ -360,9 +377,10 @@ async function refreshMissingImages({ limit = 50 } = {}) {
   const slice = targets.slice(0, limit);
   for (const link of slice) {
     processed += 1;
-    const imageUrl = await fetchImageForPage(link.url);
-    if (imageUrl) {
-      link.imageUrl = imageUrl;
+    const imageUrls = await fetchImageForPage(link.url);
+    if (imageUrls && imageUrls.length > 0) {
+      link.imageUrls = imageUrls;
+      link.imageUrl = imageUrls[0];
       updated += 1;
     }
   }

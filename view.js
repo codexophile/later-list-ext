@@ -101,14 +101,38 @@ function showStatusOverlay(linkData) {
 
   let content = `<div class="status-overlay-title">${linkData.title}</div>`;
 
-  // Add image section if available
-  if (linkData.imageUrl) {
-    console.log('[LaterList] Displaying image:', linkData.imageUrl);
-    content += `<div class="status-overlay-section">`;
-    content += `<img src="${linkData.imageUrl}" alt="Page preview" class="status-overlay-image" onerror="this.style.display='none'">`;
+  // Add image gallery if available
+  const images =
+    linkData.imageUrls && linkData.imageUrls.length > 0
+      ? linkData.imageUrls
+      : linkData.imageUrl
+      ? [linkData.imageUrl]
+      : [];
+
+  if (images.length > 0) {
+    console.log('[LaterList] Displaying', images.length, 'image(s)');
+    content += `<div class="status-overlay-gallery">`;
+
+    if (images.length === 1) {
+      // Single image: just show it
+      content += `<img src="${images[0]}" alt="Page preview" class="status-overlay-image" onerror="this.style.display='none'">`;
+    } else {
+      // Multiple images: show main + navigation
+      content += `<div class="status-overlay-main-image-wrapper">`;
+      content += `<img src="${images[0]}" alt="Page preview" class="status-overlay-image status-overlay-main-image" data-index="0" onerror="this.style.display='none'">`;
+      content += `</div>`;
+
+      content += `<div class="status-overlay-thumb-strip">`;
+      images.forEach((img, idx) => {
+        content += `<div class="status-overlay-thumb" data-index="${idx}" style="background-image: url('${img}')"></div>`;
+      });
+      content += `</div>`;
+      content += `<div class="status-overlay-image-counter">${images.length} images</div>`;
+    }
+
     content += `</div>`;
   } else {
-    console.log('[LaterList] No image URL found for this link');
+    console.log('[LaterList] No images found for this link');
   }
 
   content += `<div class="status-overlay-section">`;
@@ -154,6 +178,27 @@ function showStatusOverlay(linkData) {
   }
 
   overlay.innerHTML = content;
+
+  // Attach gallery handlers if multiple images
+  if (images.length > 1) {
+    const mainImg = overlay.querySelector('.status-overlay-main-image');
+    const thumbs = overlay.querySelectorAll('.status-overlay-thumb');
+
+    thumbs.forEach(thumb => {
+      thumb.addEventListener('click', () => {
+        const idx = parseInt(thumb.dataset.index);
+        mainImg.src = images[idx];
+        mainImg.dataset.index = idx;
+
+        thumbs.forEach(t => t.classList.remove('active'));
+        thumb.classList.add('active');
+      });
+    });
+
+    // Mark first thumb as active
+    if (thumbs.length > 0) thumbs[0].classList.add('active');
+  }
+
   overlay.style.display = 'block';
 }
 

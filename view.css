@@ -624,6 +624,57 @@ h1 {
   background: var(--bg-primary);
 }
 
+.status-overlay-gallery {
+  margin-bottom: 16px;
+}
+
+.status-overlay-main-image-wrapper {
+  margin-bottom: 8px;
+  display: flex;
+  justify-content: center;
+}
+
+.status-overlay-thumb-strip {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 4px;
+  background: var(--bg-secondary);
+  border-radius: 6px;
+  margin-bottom: 6px;
+  max-height: 90px;
+}
+
+.status-overlay-thumb {
+  flex-shrink: 0;
+  width: 70px;
+  height: 70px;
+  border-radius: 4px;
+  border: 2px solid var(--border);
+  background-size: cover;
+  background-position: center;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.2s, border-color 0.2s;
+}
+
+.status-overlay-thumb:hover {
+  opacity: 0.8;
+}
+
+.status-overlay-thumb.active {
+  opacity: 1;
+  border-color: var(--accent);
+  box-shadow: 0 0 8px rgba(99, 102, 241, 0.3);
+}
+
+.status-overlay-image-counter {
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding: 4px 0;
+}
+
 .duplicate-id {
   border: 2px solid purple;
   background-color: #ffcccc;

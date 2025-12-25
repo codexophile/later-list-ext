@@ -1086,10 +1086,15 @@ function renderActiveTab(container) {
         });
 
         linkInfo.appendChild(anchor);
-        if (link.imageUrl) {
+        const imgCountTrash = Array.isArray(link.imageUrls)
+          ? link.imageUrls.length
+          : link.imageUrl
+          ? 1
+          : 0;
+        if (imgCountTrash > 0) {
           const imageBadge = createEl('span', {
             className: 'link-badge image-badge',
-            textContent: 'IMG',
+            textContent: imgCountTrash > 1 ? String(imgCountTrash) : 'IMG',
           });
           linkInfo.appendChild(imageBadge);
         }
@@ -1102,6 +1107,7 @@ function renderActiveTab(container) {
             savedAt: link.savedAt,
             deletedAt: link.deletedAt,
             imageUrl: link.imageUrl,
+            imageUrls: link.imageUrls,
             type: 'trash',
           });
         });
@@ -1308,10 +1314,15 @@ function renderActiveTab(container) {
       });
 
       linkInfo.appendChild(anchor);
-      if (link.imageUrl) {
+      const imgCount = Array.isArray(link.imageUrls)
+        ? link.imageUrls.length
+        : link.imageUrl
+        ? 1
+        : 0;
+      if (imgCount > 0) {
         const imageBadge = createEl('span', {
           className: 'link-badge image-badge',
-          textContent: 'IMG',
+          textContent: imgCount > 1 ? String(imgCount) : 'IMG',
         });
         linkInfo.appendChild(imageBadge);
       }
@@ -1324,6 +1335,7 @@ function renderActiveTab(container) {
           savedAt: link.savedAt,
           locked: link.locked,
           imageUrl: link.imageUrl,
+          imageUrls: link.imageUrls,
           type: 'regular',
         });
       });
@@ -1917,10 +1929,15 @@ function renderDuplicates(container, duplicateGroups) {
         });
 
         linkInfo.appendChild(anchor);
-        if (linkRef.imageUrl) {
+        const imgCountDup = Array.isArray(linkRef.imageUrls)
+          ? linkRef.imageUrls.length
+          : linkRef.imageUrl
+          ? 1
+          : 0;
+        if (imgCountDup > 0) {
           const imageBadge = createEl('span', {
             className: 'link-badge image-badge',
-            textContent: 'IMG',
+            textContent: imgCountDup > 1 ? String(imgCountDup) : 'IMG',
           });
           linkInfo.appendChild(imageBadge);
         }
@@ -1934,6 +1951,7 @@ function renderDuplicates(container, duplicateGroups) {
             tabName: linkRef.tabName,
             containerName: linkRef.containerName,
             imageUrl: linkRef.imageUrl,
+            imageUrls: linkRef.imageUrls,
             type: 'duplicate',
           });
         });

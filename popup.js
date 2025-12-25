@@ -185,7 +185,11 @@ async function saveToSelection({ closeTabAfterSave }) {
                 '[role="navigation"]',
                 '[role="banner"]',
                 '[role="contentinfo"]',
+                '[role="toolbar"]',
+                '[role="tablist"]',
                 '[aria-label*="breadcrumb" i]',
+                '.sidebar',
+                '.menu',
               ];
               return Boolean(img.closest(selectors.join(',')));
             };

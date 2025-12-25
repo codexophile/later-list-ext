@@ -139,19 +139,42 @@ async function sendAllBrowserTabsToLaterList() {
       links: [],
     };
 
-    // Convert browser tabs to links
+    // Convert browser tabs to links with extraction
     const savedTabIds = [];
-    tabsToSave.forEach(tab => {
+    for (const tab of tabsToSave) {
       if (tab.url && tab.id !== undefined) {
-        newContainer.links.push({
+        const link = {
           id: `link-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
           title: tab.title || tab.url,
           url: tab.url,
           savedAt: Date.now(),
-        });
+        };
+
+        // Extract images and metadata if possible
+        if (typeof tab.id === 'number') {
+          try {
+            const extracted = await extractFromTab(tab.id);
+            if (extracted.imageUrls?.length > 0) {
+              link.imageUrls = extracted.imageUrls;
+              link.imageUrl = extracted.imageUrl;
+            }
+            if (extracted.publishedAt) link.publishedAt = extracted.publishedAt;
+            if (extracted.description) link.description = extracted.description;
+            if (extracted.summary) link.summary = extracted.summary;
+            if (extracted.keywords) link.keywords = extracted.keywords;
+          } catch (err) {
+            console.warn(
+              '[LaterList] Extraction failed for tab:',
+              tab.url,
+              err
+            );
+          }
+        }
+
+        newContainer.links.push(link);
         savedTabIds.push(tab.id);
       }
-    });
+    }
 
     // Add container to the BEGINNING of the target tab
     targetTab.containers.unshift(newContainer);
@@ -409,6 +432,255 @@ async function refreshMissingImages({ limit = 50 } = {}) {
   };
 }
 
+async function extractFromTab(tabId) {
+  const result = {
+    imageUrls: [],
+    imageUrl: null,
+    publishedAt: null,
+    description: null,
+    summary: null,
+    keywords: null,
+  };
+
+  try {
+    // Extract images
+    const imageResults = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: async () => {
+        const testImageUrl = (url, timeout = 3000) => {
+          return new Promise(resolve => {
+            const img = new Image();
+            const timer = setTimeout(() => {
+              img.onload = null;
+              img.onerror = null;
+              resolve(false);
+            }, timeout);
+            img.onload = () => {
+              clearTimeout(timer);
+              resolve(img.naturalWidth > 0 && img.naturalHeight > 0);
+            };
+            img.onerror = () => {
+              clearTimeout(timer);
+              resolve(false);
+            };
+            img.src = url;
+          });
+        };
+
+        const candidates = [];
+        const seen = new Set();
+        const add = url => {
+          if (!url) return;
+          const trimmed = url.trim();
+          if (!trimmed || seen.has(trimmed)) return;
+          if (
+            trimmed.startsWith('data:') ||
+            trimmed.startsWith('about:') ||
+            trimmed.startsWith('javascript:')
+          )
+            return;
+          seen.add(trimmed);
+          candidates.push(trimmed);
+        };
+
+        const visibleEnough = img => {
+          if (
+            !img.complete ||
+            img.naturalWidth === 0 ||
+            img.naturalHeight === 0
+          )
+            return false;
+          const w = img.naturalWidth || img.width || 0;
+          const h = img.naturalHeight || img.height || 0;
+          if (w < 128 || h < 128) return false;
+          const ratio = w / h;
+          return ratio > 0.3 && ratio < 3.5 && img.offsetParent !== null;
+        };
+
+        document.querySelectorAll('img').forEach(img => {
+          if (!visibleEnough(img)) return;
+          const src = img.currentSrc || img.src || img.getAttribute('data-src');
+          add(src);
+        });
+
+        const metaSelectors = [
+          'meta[property="og:image"]',
+          'meta[name="twitter:image"]',
+          'meta[name="twitter:image:src"]',
+        ];
+        const metaUrls = [];
+        metaSelectors.forEach(sel => {
+          const el = document.querySelector(sel);
+          if (el?.content && !seen.has(el.content.trim())) {
+            metaUrls.push(el.content.trim());
+          }
+        });
+
+        const icon = document.querySelector('link[rel*="icon"]');
+        if (icon?.href && !seen.has(icon.href)) {
+          metaUrls.push(icon.href);
+        }
+
+        const validationPromises = metaUrls.map(async url => {
+          const isValid = await testImageUrl(url);
+          return isValid ? url : null;
+        });
+
+        const validatedMeta = (await Promise.all(validationPromises)).filter(
+          Boolean
+        );
+        return [...validatedMeta, ...candidates];
+      },
+    });
+
+    const imageUrls = imageResults?.[0]?.result || [];
+    result.imageUrls = imageUrls;
+    result.imageUrl = imageUrls[0] || null;
+
+    // Extract metadata
+    const metaResults = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => {
+        const extractJsonLd = () => {
+          const scripts = document.querySelectorAll(
+            'script[type="application/ld+json"]'
+          );
+          for (const script of scripts) {
+            try {
+              const data = JSON.parse(script.textContent);
+              if (data) return Array.isArray(data) ? data[0] : data;
+            } catch {}
+          }
+          return null;
+        };
+
+        const extractPublishedDate = () => {
+          const jsonLd = extractJsonLd();
+          if (jsonLd?.datePublished)
+            return new Date(jsonLd.datePublished).getTime();
+          const metaSelectors = [
+            'meta[property="article:published_time"]',
+            'meta[name="publish_date"]',
+            'meta[name="date"]',
+            'meta[property="og:published_time"]',
+          ];
+          for (const sel of metaSelectors) {
+            const el = document.querySelector(sel);
+            const content = el?.getAttribute('content');
+            if (content) {
+              const timestamp = new Date(content).getTime();
+              if (!isNaN(timestamp)) return timestamp;
+            }
+          }
+          return null;
+        };
+
+        const extractDescription = () => {
+          const jsonLd = extractJsonLd();
+          if (jsonLd?.description) return jsonLd.description.trim();
+          const metaSelectors = [
+            'meta[property="og:description"]',
+            'meta[name="description"]',
+            'meta[name="twitter:description"]',
+          ];
+          for (const sel of metaSelectors) {
+            const el = document.querySelector(sel);
+            const content = el?.getAttribute('content');
+            if (content) return content.trim();
+          }
+          const firstP = document.querySelector('article p, main p, p');
+          if (firstP?.textContent) {
+            const text = firstP.textContent.trim();
+            return text.length > 300 ? text.slice(0, 300) + '...' : text;
+          }
+          return null;
+        };
+
+        const extractSummary = () => {
+          const selectors = [
+            'article',
+            'main',
+            '[role="main"]',
+            '.article-content',
+            '.post-content',
+            '.entry-content',
+          ];
+          for (const sel of selectors) {
+            const el = document.querySelector(sel);
+            if (el) {
+              const text = el.innerText || el.textContent || '';
+              const cleaned = text.trim().replace(/\s+/g, ' ');
+              if (cleaned.length > 50) {
+                return cleaned.length > 500
+                  ? cleaned.slice(0, 500) + '...'
+                  : cleaned;
+              }
+            }
+          }
+          return null;
+        };
+
+        const extractKeywords = () => {
+          const keywords = [];
+          const seen = new Set();
+          const jsonLd = extractJsonLd();
+          if (jsonLd?.keywords) {
+            const kw = Array.isArray(jsonLd.keywords)
+              ? jsonLd.keywords
+              : jsonLd.keywords.split(',');
+            kw.forEach(k => {
+              const cleaned = k.trim();
+              if (cleaned && !seen.has(cleaned)) {
+                seen.add(cleaned);
+                keywords.push(cleaned);
+              }
+            });
+          }
+          const metaKeywords = document.querySelector('meta[name="keywords"]');
+          if (metaKeywords) {
+            const content = metaKeywords.getAttribute('content') || '';
+            content.split(',').forEach(k => {
+              const cleaned = k.trim();
+              if (cleaned && !seen.has(cleaned)) {
+                seen.add(cleaned);
+                keywords.push(cleaned);
+              }
+            });
+          }
+          const metaTags = document.querySelectorAll(
+            'meta[property="article:tag"]'
+          );
+          metaTags.forEach(tag => {
+            const content = tag.getAttribute('content');
+            if (content && !seen.has(content)) {
+              seen.add(content);
+              keywords.push(content);
+            }
+          });
+          return keywords.length > 0 ? keywords : null;
+        };
+
+        return {
+          publishedAt: extractPublishedDate(),
+          description: extractDescription(),
+          summary: extractSummary(),
+          keywords: extractKeywords(),
+        };
+      },
+    });
+
+    const meta = metaResults?.[0]?.result || {};
+    result.publishedAt = meta.publishedAt;
+    result.description = meta.description;
+    result.summary = meta.summary;
+    result.keywords = meta.keywords;
+  } catch (err) {
+    console.warn('[LaterList] Extraction failed:', err);
+  }
+
+  return result;
+}
+
 function createContextMenus() {
   chrome.contextMenus.removeAll(() => {
     chrome.contextMenus.create({
@@ -440,7 +712,19 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   const url = info.linkUrl || info.pageUrl || tab?.url;
   const title = info.selectionText || tab?.title || url;
   if (!url) return;
-  await addLink({ url, title });
+
+  // Extract images and metadata if we have a valid tab
+  let payload = { url, title };
+  if (tab?.id && typeof tab.id === 'number') {
+    try {
+      const extracted = await extractFromTab(tab.id);
+      payload = { ...payload, ...extracted };
+    } catch (err) {
+      console.warn('[LaterList] Extraction failed for context menu save:', err);
+    }
+  }
+
+  await addLink(payload);
 
   // Notify view.html to refresh
   chrome.runtime.sendMessage({ type: 'laterlist:updateView' }).catch(() => {

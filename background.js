@@ -499,6 +499,46 @@ function absolutizeUrl(url, base) {
   }
 }
 
+// --- Action badge & title for saved pages ---
+function normalizeUrlForMatch(url) {
+  try {
+    const u = new URL(url);
+    // Ignore hash fragment when matching
+    u.hash = '';
+    return u.toString();
+  } catch {
+    return url || '';
+  }
+}
+
+async function isUrlSaved(url) {
+  if (!url) return false;
+  const target = normalizeUrlForMatch(url);
+  const data = await getData();
+  for (const tab of data.tabs) {
+    for (const container of tab.containers) {
+      for (const link of container.links) {
+        if (normalizeUrlForMatch(link.url) === target) return true;
+      }
+    }
+  }
+  return false;
+}
+
+async function refreshTabActionState(tabId, url) {
+  try {
+    const saved = await isUrlSaved(url);
+    const title = saved ? 'Saved in LaterList' : 'Save to LaterList';
+    await chrome.action.setTitle({ tabId, title });
+    await chrome.action.setBadgeText({ tabId, text: saved ? '✓' : '' });
+    if (saved) {
+      await chrome.action.setBadgeBackgroundColor({ tabId, color: '#2E7D32' });
+    }
+  } catch (err) {
+    console.warn('[LaterList] refreshTabActionState failed:', err);
+  }
+}
+
 function decodeBasicEntities(str) {
   return str
     .replace(/&amp;/gi, '&')
@@ -925,6 +965,10 @@ chrome.runtime.onInstalled.addListener(async () => {
   await getData();
   createContextMenus();
   chrome.tabs.create({ url: 'view.html' });
+  // Set a pleasant badge background for the saved indicator
+  try {
+    await chrome.action.setBadgeBackgroundColor({ color: '#2E7D32' });
+  } catch {}
   console.log('LaterList installed and initialized.');
 });
 
@@ -951,6 +995,11 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
   await addLink(payload);
 
+  // Update the action badge/title for this tab (it remains open)
+  if (tab?.id && url) {
+    refreshTabActionState(tab.id, url);
+  }
+
   // Notify view.html to refresh
   chrome.runtime.sendMessage({ type: 'laterlist:updateView' }).catch(() => {
     // Ignore errors if view.html is not open
@@ -966,7 +1015,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   if (message?.type === 'laterlist:addLink') {
     addLink(message.payload)
-      .then(link => sendResponse({ link }))
+      .then(link => {
+        // If the sender has a tab, refresh the badge for that tab
+        if (sender?.tab?.id && message.payload?.url) {
+          refreshTabActionState(sender.tab.id, message.payload.url);
+        }
+        sendResponse({ link });
+      })
       .catch(err => sendResponse({ error: err?.message }));
     return true;
   }
@@ -1041,4 +1096,39 @@ chrome.commands.onCommand.addListener(command => {
       showNotification(result, 'Tabs after: ');
     });
   }
+});
+
+// Keep the action indicator in sync with tab changes and data updates
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  const url = changeInfo.url || tab?.url || '';
+  if (url) {
+    refreshTabActionState(tabId, url);
+  } else if (changeInfo.status === 'complete') {
+    // Fallback: fetch tab to read URL when status completes
+    chrome.tabs
+      .get(tabId)
+      .then(t => {
+        if (t?.url) refreshTabActionState(tabId, t.url);
+      })
+      .catch(() => {});
+  }
+});
+
+chrome.tabs.onActivated.addListener(async activeInfo => {
+  try {
+    const t = await chrome.tabs.get(activeInfo.tabId);
+    if (t?.url) refreshTabActionState(activeInfo.tabId, t.url);
+  } catch {}
+});
+
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName !== 'local' || !changes.readLaterData) return;
+  chrome.tabs
+    .query({})
+    .then(tabs => {
+      tabs.forEach(t => {
+        if (t.url) refreshTabActionState(t.id, t.url);
+      });
+    })
+    .catch(() => {});
 });

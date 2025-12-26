@@ -745,7 +745,16 @@ function normalizeUrl(url) {
       });
     }
 
-    const path = u.pathname.replace(/\/+$/, '');
+    let path = u.pathname;
+
+    // If path matches /models/{slug}/..., keep only /models/{slug}
+    const pathParts = path.split('/').filter(Boolean);
+    const modelsIndex = pathParts.indexOf('models');
+    if (modelsIndex > -1 && pathParts.length > modelsIndex + 1) {
+      path = `/models/${pathParts[modelsIndex + 1]}`;
+    }
+
+    path = path.replace(/\/+$/, '');
     const query = params.toString();
     // Ignore special slot fragments (e.g., #slot=71) for duplicate detection
     const hash = /^#slot=\d+$/.test(u.hash) ? '' : u.hash;

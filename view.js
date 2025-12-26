@@ -1443,6 +1443,12 @@ function renderActiveTab(container) {
         linkRow.appendChild(favicon);
         linkRow.appendChild(linkInfo);
         linkRow.appendChild(actions);
+
+        // Add context menu on right-click for trash links
+        linkRow.addEventListener('contextmenu', e => {
+          showContextMenuTrash(e, link);
+        });
+
         trashContainer.appendChild(linkRow);
       });
     }
@@ -1710,6 +1716,15 @@ function renderActiveTab(container) {
       if (link.locked) {
         linkRow.classList.add('link-locked');
       }
+
+      // Add context menu on right-click
+      linkRow.addEventListener('contextmenu', e => {
+        showContextMenu(e, {
+          tabId: tab.id,
+          containerId: containerData.id,
+          linkId: link.id,
+        });
+      });
 
       content.appendChild(linkRow);
     });
@@ -2312,6 +2327,16 @@ function renderDuplicates(container, duplicateGroups) {
         linkRow.appendChild(favicon);
         linkRow.appendChild(linkInfo);
         linkRow.appendChild(actions);
+
+        // Add context menu on right-click for duplicate links
+        linkRow.addEventListener('contextmenu', e => {
+          showContextMenu(e, {
+            tabId: linkRef.tabId,
+            containerId: linkRef.containerId,
+            linkId: linkRef.linkId,
+          });
+        });
+
         content.appendChild(linkRow);
       });
 
@@ -2628,4 +2653,345 @@ function initSortable(rootEl) {
       },
     });
   });
+}
+
+// Context Menu Functionality
+let contextMenu = null;
+let contextMenuBackdrop = null;
+let currentContextLinkData = null;
+
+function ensureContextMenu() {
+  if (contextMenu) return contextMenu;
+
+  contextMenuBackdrop = createEl('div', { className: 'context-menu-backdrop' });
+  contextMenu = createEl('div', { className: 'context-menu' });
+
+  document.body.appendChild(contextMenuBackdrop);
+  document.body.appendChild(contextMenu);
+
+  contextMenuBackdrop.addEventListener('click', hideContextMenu);
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') hideContextMenu();
+  });
+
+  return contextMenu;
+}
+
+function showContextMenu(event, linkData) {
+  event.preventDefault();
+  event.stopPropagation();
+
+  currentContextLinkData = linkData;
+  const menu = ensureContextMenu();
+  const { tabId, containerId, linkId } = linkData;
+  const link = getLinkById(tabId, containerId, linkId);
+  if (!link) return;
+
+  // Build menu items
+  const items = [];
+
+  // Copy URL
+  items.push({
+    label: 'Copy URL',
+    icon: '📋',
+    action: () => {
+      navigator.clipboard.writeText(link.url);
+      hideContextMenu();
+    },
+  });
+
+  // Open in new tab
+  items.push({
+    label: 'Open in new tab',
+    icon: '🔗',
+    action: () => {
+      handleOpenLink(link.url, tabId, containerId, linkId);
+      hideContextMenu();
+    },
+  });
+
+  items.push(null); // Divider
+
+  // Lock/Unlock
+  items.push({
+    label: link.locked ? 'Unlock link' : 'Lock link',
+    icon: link.locked ? '🔓' : '🔒',
+    action: () => {
+      toggleLockLink(tabId, containerId, linkId);
+      hideContextMenu();
+    },
+  });
+
+  // View details
+  items.push({
+    label: 'View details',
+    icon: '🖼️',
+    action: () => {
+      const tab = state.data.tabs.find(t => t.id === tabId);
+      const container = tab?.containers.find(c => c.id === containerId);
+      showDetailOverlay({
+        ...link,
+        tabName: tab?.name,
+        containerName: container?.name,
+      });
+      hideContextMenu();
+    },
+  });
+
+  // View images
+  const imgCount = Array.isArray(link.imageUrls)
+    ? link.imageUrls.length
+    : link.imageUrl
+    ? 1
+    : 0;
+  if (imgCount > 0) {
+    items.push({
+      label: `View images (${imgCount})`,
+      icon: '📸',
+      action: () => {
+        showImageViewer(link);
+        hideContextMenu();
+      },
+    });
+  }
+
+  items.push(null); // Divider
+
+  // Archive option
+  items.push({
+    label: 'Archive',
+    icon: '📁',
+    action: () => {
+      archiveLink(tabId, containerId, linkId);
+      hideContextMenu();
+    },
+  });
+
+  // Move to container
+  items.push({
+    label: 'Move to...',
+    icon: '➡️',
+    action: () => {
+      showMoveModal((targetTabId, targetContainerId) => {
+        const targetTab = state.data.tabs.find(t => t.id === targetTabId);
+        const targetContainer = targetTab?.containers.find(
+          c => c.id === targetContainerId
+        );
+        if (!targetContainer) return;
+
+        const fromTab = state.data.tabs.find(t => t.id === tabId);
+        const fromContainer = fromTab?.containers.find(
+          c => c.id === containerId
+        );
+        if (!fromContainer) return;
+
+        const idx = fromContainer.links.findIndex(l => l.id === linkId);
+        if (idx === -1) return;
+
+        const [moved] = fromContainer.links.splice(idx, 1);
+        targetContainer.links.push(moved);
+
+        persist();
+        render();
+      });
+      hideContextMenu();
+    },
+  });
+
+  items.push(null); // Divider
+
+  // Trash
+  items.push({
+    label: 'Trash',
+    icon: '🗑️',
+    action: () => {
+      deleteLink(tabId, containerId, linkId);
+      hideContextMenu();
+    },
+    danger: true,
+  });
+
+  // Render menu
+  menu.innerHTML = '';
+  items.forEach(item => {
+    if (item === null) {
+      const divider = createEl('div', { className: 'context-menu-divider' });
+      menu.appendChild(divider);
+    } else {
+      const btn = createEl('button', {
+        className: `context-menu-item${item.danger ? ' danger' : ''}`,
+        onClick: item.action,
+      });
+
+      const icon = createEl('span', {
+        className: 'context-menu-item-icon',
+        textContent: item.icon,
+      });
+      const label = createEl('span', { textContent: item.label });
+
+      btn.appendChild(icon);
+      btn.appendChild(label);
+      menu.appendChild(btn);
+    }
+  });
+
+  // Position menu at cursor
+  menu.style.display = 'block';
+  const rect = menu.getBoundingClientRect();
+
+  let x = event.clientX;
+  let y = event.clientY;
+
+  // Adjust if menu goes out of bounds
+  if (x + rect.width > window.innerWidth) {
+    x = window.innerWidth - rect.width - 10;
+  }
+  if (y + rect.height > window.innerHeight) {
+    y = window.innerHeight - rect.height - 10;
+  }
+
+  menu.style.left = x + 'px';
+  menu.style.top = y + 'px';
+  menu.classList.add('show');
+  contextMenuBackdrop.classList.add('show');
+}
+
+function hideContextMenu() {
+  if (contextMenu) {
+    contextMenu.classList.remove('show');
+  }
+  if (contextMenuBackdrop) {
+    contextMenuBackdrop.classList.remove('show');
+  }
+  currentContextLinkData = null;
+}
+
+function showContextMenuTrash(event, link) {
+  event.preventDefault();
+  event.stopPropagation();
+
+  const menu = ensureContextMenu();
+
+  // Build menu items for trash links
+  const items = [];
+
+  // Copy URL
+  items.push({
+    label: 'Copy URL',
+    icon: '📋',
+    action: () => {
+      navigator.clipboard.writeText(link.url);
+      hideContextMenu();
+    },
+  });
+
+  // Open in new tab
+  items.push({
+    label: 'Open in new tab',
+    icon: '🔗',
+    action: () => {
+      chrome.tabs.create({ url: link.url, active: false });
+      hideContextMenu();
+    },
+  });
+
+  items.push(null); // Divider
+
+  // View details
+  items.push({
+    label: 'View details',
+    icon: '🖼️',
+    action: () => {
+      showDetailOverlay(link);
+      hideContextMenu();
+    },
+  });
+
+  // View images
+  const imgCount = Array.isArray(link.imageUrls)
+    ? link.imageUrls.length
+    : link.imageUrl
+    ? 1
+    : 0;
+  if (imgCount > 0) {
+    items.push({
+      label: `View images (${imgCount})`,
+      icon: '📸',
+      action: () => {
+        showImageViewer(link);
+        hideContextMenu();
+      },
+    });
+  }
+
+  items.push(null); // Divider
+
+  // Restore
+  items.push({
+    label: 'Restore',
+    icon: '↩️',
+    action: () => {
+      restoreLink(link.id);
+      hideContextMenu();
+    },
+  });
+
+  // Delete permanently
+  items.push({
+    label: 'Delete permanently',
+    icon: '🗑️',
+    action: () => {
+      if (confirm('Permanently delete this link? This cannot be undone.')) {
+        state.data.trash = state.data.trash.filter(l => l.id !== link.id);
+        persist();
+        render();
+      }
+      hideContextMenu();
+    },
+    danger: true,
+  });
+
+  // Render menu
+  menu.innerHTML = '';
+  items.forEach(item => {
+    if (item === null) {
+      const divider = createEl('div', { className: 'context-menu-divider' });
+      menu.appendChild(divider);
+    } else {
+      const btn = createEl('button', {
+        className: `context-menu-item${item.danger ? ' danger' : ''}`,
+        onClick: item.action,
+      });
+
+      const icon = createEl('span', {
+        className: 'context-menu-item-icon',
+        textContent: item.icon,
+      });
+      const label = createEl('span', { textContent: item.label });
+
+      btn.appendChild(icon);
+      btn.appendChild(label);
+      menu.appendChild(btn);
+    }
+  });
+
+  // Position menu at cursor
+  menu.style.display = 'block';
+  const rect = menu.getBoundingClientRect();
+
+  let x = event.clientX;
+  let y = event.clientY;
+
+  // Adjust if menu goes out of bounds
+  if (x + rect.width > window.innerWidth) {
+    x = window.innerWidth - rect.width - 10;
+  }
+  if (y + rect.height > window.innerHeight) {
+    y = window.innerHeight - rect.height - 10;
+  }
+
+  menu.style.left = x + 'px';
+  menu.style.top = y + 'px';
+  menu.classList.add('show');
+  contextMenuBackdrop.classList.add('show');
 }

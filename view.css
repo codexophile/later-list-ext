@@ -1414,3 +1414,98 @@ h1 {
 .import-divider::after {
   right: 0;
 }
+
+/* Context Menu Styles */
+.context-menu {
+  position: fixed;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow-lg);
+  padding: 4px 0;
+  min-width: 200px;
+  z-index: 10000;
+  display: none;
+  backdrop-filter: blur(10px);
+  animation: contextMenuIn 0.15s ease-out;
+}
+
+.context-menu.show {
+  display: block;
+}
+
+@keyframes contextMenuIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.context-menu-item {
+  padding: 8px 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-primary);
+  font-size: 13px;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+  border: none;
+  background: none;
+  width: 100%;
+  text-align: left;
+}
+
+.context-menu-item:hover {
+  background: var(--hover);
+  color: var(--accent);
+}
+
+.context-menu-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  color: var(--text-muted);
+}
+
+.context-menu-item:disabled:hover {
+  background: none;
+  color: var(--text-muted);
+}
+
+.context-menu-item.danger:hover {
+  background: rgba(248, 81, 73, 0.1);
+  color: var(--danger);
+}
+
+.context-menu-item-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  font-size: 14px;
+}
+
+.context-menu-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 0;
+}
+
+.context-menu-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 9999;
+  display: none;
+}
+
+.context-menu-backdrop.show {
+  display: block;
+}

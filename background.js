@@ -173,7 +173,10 @@ async function sendAllBrowserTabsToLaterList() {
         // Extract images and metadata if possible
         if (typeof tab.id === 'number') {
           try {
-            const extracted = await extractFromTab(tab.id);
+            // Use fetch-based extraction for discarded tabs
+            const extracted = tab.discarded
+              ? await extractFromUrl(tab.url)
+              : await extractFromTab(tab.id);
             if (extracted.imageUrls?.length > 0) {
               link.imageUrls = extracted.imageUrls;
               link.imageUrl = extracted.imageUrl;
@@ -344,7 +347,10 @@ async function sendTabsAroundCurrentTab(direction) {
         // Extract images and metadata if possible
         if (typeof tab.id === 'number') {
           try {
-            const extracted = await extractFromTab(tab.id);
+            // Use fetch-based extraction for discarded tabs
+            const extracted = tab.discarded
+              ? await extractFromUrl(tab.url)
+              : await extractFromTab(tab.id);
             if (extracted.imageUrls?.length > 0) {
               link.imageUrls = extracted.imageUrls;
               link.imageUrl = extracted.imageUrl;
@@ -729,6 +735,181 @@ async function refreshMissingImages({ limit = 50 } = {}) {
   };
 }
 
+async function extractFromHtml(html, url) {
+  const result = {
+    imageUrls: [],
+    imageUrl: null,
+    publishedAt: null,
+    description: null,
+    summary: null,
+    keywords: null,
+  };
+
+  try {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+
+    const isSvg = url => {
+      const u = url.trim().toLowerCase();
+      return u.endsWith('.svg') || u.startsWith('data:image/svg');
+    };
+
+    const isBlockedMeta = url => {
+      const lowered = url.trim().toLowerCase();
+      const pattern = /logo|icon|sprite|favicon|social|share/;
+      if (pattern.test(lowered)) return true;
+      try {
+        const parsed = new URL(url, url);
+        const path = parsed.pathname.toLowerCase();
+        if (path.includes('favicon')) return true;
+        const file = path.split('/').pop() || '';
+        return pattern.test(file);
+      } catch {
+        return false;
+      }
+    };
+
+    // Extract images from meta tags
+    const seen = new Set();
+    const metaUrls = [];
+    const metaSelectors = [
+      'meta[property="og:image"]',
+      'meta[name="twitter:image"]',
+      'meta[name="twitter:image:src"]',
+    ];
+
+    metaSelectors.forEach(sel => {
+      const el = doc.querySelector(sel);
+      if (el?.content) {
+        const val = el.content.trim();
+        if (!seen.has(val) && !isSvg(val) && !isBlockedMeta(val)) {
+          const abs = absolutizeUrl(val, url);
+          if (abs) {
+            metaUrls.push(abs);
+            seen.add(val);
+          }
+        }
+      }
+    });
+
+    result.imageUrls = metaUrls;
+    result.imageUrl = metaUrls[0] || null;
+
+    // Extract metadata
+    const extractJsonLd = () => {
+      const scripts = doc.querySelectorAll(
+        'script[type="application/ld+json"]'
+      );
+      for (const script of scripts) {
+        try {
+          const data = JSON.parse(script.textContent);
+          if (data) return Array.isArray(data) ? data[0] : data;
+        } catch {}
+      }
+      return null;
+    };
+
+    const jsonLd = extractJsonLd();
+
+    // Published date
+    if (jsonLd?.datePublished) {
+      result.publishedAt = new Date(jsonLd.datePublished).getTime();
+    } else {
+      const dateSelectors = [
+        'meta[property="article:published_time"]',
+        'meta[name="publish_date"]',
+        'meta[name="date"]',
+        'meta[property="og:published_time"]',
+      ];
+      for (const sel of dateSelectors) {
+        const el = doc.querySelector(sel);
+        const content = el?.getAttribute('content');
+        if (content) {
+          const timestamp = new Date(content).getTime();
+          if (!isNaN(timestamp)) {
+            result.publishedAt = timestamp;
+            break;
+          }
+        }
+      }
+    }
+
+    // Description
+    if (jsonLd?.description) {
+      result.description = jsonLd.description.trim();
+    } else {
+      const descSelectors = [
+        'meta[property="og:description"]',
+        'meta[name="description"]',
+        'meta[name="twitter:description"]',
+      ];
+      for (const sel of descSelectors) {
+        const el = doc.querySelector(sel);
+        const content = el?.getAttribute('content');
+        if (content) {
+          result.description = content.trim();
+          break;
+        }
+      }
+    }
+
+    // Keywords
+    const keywords = [];
+    const kwSeen = new Set();
+    if (jsonLd?.keywords) {
+      const kw = Array.isArray(jsonLd.keywords)
+        ? jsonLd.keywords
+        : jsonLd.keywords.split(',');
+      kw.forEach(k => {
+        const cleaned = k.trim();
+        if (cleaned && !kwSeen.has(cleaned)) {
+          kwSeen.add(cleaned);
+          keywords.push(cleaned);
+        }
+      });
+    }
+
+    const metaKeywords = doc.querySelector('meta[name="keywords"]');
+    if (metaKeywords) {
+      const content = metaKeywords.getAttribute('content') || '';
+      content.split(',').forEach(k => {
+        const cleaned = k.trim();
+        if (cleaned && !kwSeen.has(cleaned)) {
+          kwSeen.add(cleaned);
+          keywords.push(cleaned);
+        }
+      });
+    }
+
+    const metaTags = doc.querySelectorAll('meta[property="article:tag"]');
+    metaTags.forEach(tag => {
+      const content = tag.getAttribute('content');
+      if (content && !kwSeen.has(content)) {
+        kwSeen.add(content);
+        keywords.push(content);
+      }
+    });
+
+    if (keywords.length > 0) result.keywords = keywords;
+  } catch (err) {
+    console.warn('[LaterList] HTML extraction failed:', err);
+  }
+
+  return result;
+}
+
+async function extractFromUrl(url) {
+  try {
+    const res = await fetch(url, { redirect: 'follow', credentials: 'omit' });
+    if (!res.ok) return { imageUrls: [], imageUrl: null };
+    const html = await res.text();
+    return await extractFromHtml(html, url);
+  } catch (err) {
+    console.warn('[LaterList] extractFromUrl failed for', url, err);
+    return { imageUrls: [], imageUrl: null };
+  }
+}
+
 async function extractFromTab(tabId) {
   const result = {
     imageUrls: [],
@@ -1071,7 +1252,10 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   let payload = { url, title };
   if (tab?.id && typeof tab.id === 'number') {
     try {
-      const extracted = await extractFromTab(tab.id);
+      // Use fetch-based extraction for discarded tabs
+      const extracted = tab.discarded
+        ? await extractFromUrl(url)
+        : await extractFromTab(tab.id);
       payload = { ...payload, ...extracted };
     } catch (err) {
       console.warn('[LaterList] Extraction failed for context menu save:', err);

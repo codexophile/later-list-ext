@@ -75,6 +75,16 @@
       box-sizing: border-box;
     }
 
+    .setting-textarea {
+      min-height: 80px;
+      resize: vertical;
+    }
+
+    .setting-checkbox {
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+
     .setting-input:focus {
       outline: none;
       border-color: #4a9eff;
@@ -216,6 +226,67 @@
       <div class="setting-preview" id="format-preview">
         Preview: <strong>Loading...</strong>
       </div>
+    </div>
+  </div>
+
+  <div class="setting-section">
+    <h2>URL Cleanup & Duplicate Detection</h2>
+
+    <div class="setting-group">
+      <label class="setting-label">
+        <input type="checkbox" id="url-cleanup-enabled" class="setting-checkbox">
+        Enable cleanup when matching URLs
+      </label>
+      <div class="setting-help">
+        Used for duplicate detection, sorting, and the saved-page badge.
+      </div>
+    </div>
+
+    <div class="setting-group">
+      <label class="setting-label">
+        <input type="checkbox" id="strip-tracking-params" class="setting-checkbox">
+        Strip common tracking parameters
+      </label>
+      <div class="setting-help">
+        Removes parameters like <code>utm_*</code>, <code>fbclid</code>, <code>gclid</code>, <code>icid</code>,
+        <code>mc_eid</code>, <code>ref</code>, <code>ref_src</code>, and <code>igshid</code>.
+      </div>
+    </div>
+
+    <div class="setting-group">
+      <label class="setting-label" for="tracking-param-names">Parameter names to remove</label>
+      <textarea id="tracking-param-names" class="setting-input setting-textarea" placeholder="ref
+igshid"></textarea>
+      <div class="setting-help">One per line. Exact query parameter names that should be removed.</div>
+    </div>
+
+    <div class="setting-group">
+      <label class="setting-label" for="tracking-param-prefixes">Parameter prefixes to remove</label>
+      <textarea id="tracking-param-prefixes" class="setting-input setting-textarea" placeholder="utm_
+icid"></textarea>
+      <div class="setting-help">One per line. Any parameter starting with these prefixes will be removed.</div>
+    </div>
+
+    <div class="setting-group">
+      <label class="setting-label" for="path-rewrite-rules">Path rewrite rules</label>
+      <textarea id="path-rewrite-rules" class="setting-input setting-textarea"
+        placeholder="^/models/([^/]+)(?:/.*)?$ => /models/$1"></textarea>
+      <div class="setting-help">One rule per line. Format: <code>regex => replacement</code>. Useful for trimming long
+        paths.</div>
+    </div>
+
+    <div class="setting-group">
+      <label class="setting-label" for="hash-ignore-patterns">Hash fragments to ignore</label>
+      <textarea id="hash-ignore-patterns" class="setting-input setting-textarea" placeholder="^slot=\d+$"></textarea>
+      <div class="setting-help">One regex per line. If a fragment matches, it will be dropped for matching.</div>
+    </div>
+
+    <div class="setting-group">
+      <label class="setting-label" for="normalization-input">Normalization tester</label>
+      <input type="text" id="normalization-input" class="setting-input"
+        placeholder="https://example.com/page?utm_source=newsletter#slot=42">
+      <div class="setting-preview" id="normalization-output">Enter a URL to preview cleanup.</div>
+      <div class="setting-help">Preview uses the current rules above.</div>
     </div>
   </div>
 

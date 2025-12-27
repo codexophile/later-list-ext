@@ -7,7 +7,7 @@ let state = {
   activeTabId: null,
   duplicateUrls: new Set(),
   viewMode: 'links',
-  aggressiveNormalization: false,
+  settings: null,
   bulkMode: false,
   selectedLinks: new Set(),
   refreshingImages: false,
@@ -20,6 +20,45 @@ const dragHoverSwitch = {
   targetTabId: null,
   highlightEl: null,
 };
+
+const DEFAULT_URL_CLEANUP = {
+  enabled: true,
+  stripTrackingParams: true,
+  trackingParamNames: ['ref', 'ref_src', 'igshid'],
+  trackingParamPrefixes: ['utm_', 'icid', 'fbclid', 'gclid', 'mc_eid'],
+  ignoreHashPatterns: ['^slot=\\d+$'],
+  pathRewriteRules: [
+    { pattern: '^/models/([^/]+)(?:/.*)?$', replace: '/models/$1' },
+  ],
+  trimTrailingSlash: true,
+  lowercase: true,
+};
+
+const DEFAULT_SETTINGS = {
+  containerNameFormat: 'ddd, MMM DD, YYYY at HHmm Hrs',
+  sendAllTabsDestination: '',
+  urlCleanup: DEFAULT_URL_CLEANUP,
+};
+
+function mergeSettings(raw = {}) {
+  const merged = { ...DEFAULT_SETTINGS, ...raw };
+  merged.urlCleanup = { ...DEFAULT_URL_CLEANUP, ...(raw.urlCleanup || {}) };
+  return merged;
+}
+
+async function loadSettings() {
+  const stored = await chrome.storage.local.get('laterlistSettings');
+  state.settings = mergeSettings(stored.laterlistSettings || {});
+}
+
+async function saveSettings(settings) {
+  state.settings = mergeSettings(settings);
+  await chrome.storage.local.set({ laterlistSettings: state.settings });
+}
+
+function getUrlCleanupSettings() {
+  return state.settings?.urlCleanup || DEFAULT_URL_CLEANUP;
+}
 
 function setDragHoverActive(isActive) {
   dragHoverSwitch.isDragging = isActive;
@@ -724,44 +763,80 @@ async function persist() {
   });
 }
 
-function normalizeUrl(url) {
+function normalizeUrl(url, cleanupOverride) {
+  const cleanup = {
+    ...DEFAULT_URL_CLEANUP,
+    ...(cleanupOverride || getUrlCleanupSettings()),
+  };
+
+  const fallback = cleanup.lowercase
+    ? (url || '').toLowerCase().trim()
+    : (url || '').trim();
+
+  if (!cleanup.enabled) return fallback;
+
   try {
     const u = new URL(url);
     const params = new URLSearchParams(u.search);
 
-    // Only strip tracking params if aggressive mode is enabled
-    if (state.aggressiveNormalization) {
-      const TRACKING_PREFIXES = ['utm_', 'icid', 'fbclid', 'gclid', 'mc_eid'];
-      const TRACKING_KEYS = ['ref', 'ref_src', 'igshid'];
-
-      // Drop common tracking params
+    if (cleanup.stripTrackingParams) {
+      const names = cleanup.trackingParamNames || [];
+      const prefixes = cleanup.trackingParamPrefixes || [];
       [...params.keys()].forEach(key => {
         if (
-          TRACKING_KEYS.includes(key) ||
-          TRACKING_PREFIXES.some(prefix => key.startsWith(prefix))
+          names.includes(key) ||
+          prefixes.some(prefix => prefix && key.startsWith(prefix))
         ) {
           params.delete(key);
         }
       });
     }
 
-    let path = u.pathname;
-
-    // If path matches /models/{slug}/..., keep only /models/{slug}
-    const pathParts = path.split('/').filter(Boolean);
-    const modelsIndex = pathParts.indexOf('models');
-    if (modelsIndex > -1 && pathParts.length > modelsIndex + 1) {
-      path = `/models/${pathParts[modelsIndex + 1]}`;
+    let path = u.pathname || '/';
+    if (Array.isArray(cleanup.pathRewriteRules)) {
+      cleanup.pathRewriteRules.forEach(rule => {
+        if (!rule || !rule.pattern) return;
+        try {
+          const regex = new RegExp(rule.pattern, 'i');
+          if (regex.test(path)) {
+            path = path.replace(regex, rule.replace || '');
+          }
+        } catch (err) {
+          console.warn('[LaterList] Invalid path rewrite rule:', rule, err);
+        }
+      });
     }
 
-    path = path.replace(/\/+$/, '');
+    if (cleanup.trimTrailingSlash !== false) {
+      path = path.replace(/\/+$/, '') || '/';
+    }
+
+    let hash = u.hash || '';
+    const hashValue = hash.startsWith('#') ? hash.slice(1) : hash;
+    if (Array.isArray(cleanup.ignoreHashPatterns)) {
+      for (const pattern of cleanup.ignoreHashPatterns) {
+        if (!pattern) continue;
+        try {
+          const regex = new RegExp(pattern, 'i');
+          if (regex.test(hashValue)) {
+            hash = '';
+            break;
+          }
+        } catch (err) {
+          console.warn('[LaterList] Invalid hash ignore rule:', pattern, err);
+        }
+      }
+    }
+
     const query = params.toString();
-    // Ignore special slot fragments (e.g., #slot=71) for duplicate detection
-    const hash = /^#slot=\d+$/.test(u.hash) ? '' : u.hash;
-    const base = `${u.protocol}//${u.host}${path || '/'}`;
-    return (query ? `${base}?${query}${hash}` : `${base}${hash}`).toLowerCase();
+    const basePath = path || '/';
+    const base = `${u.protocol}//${u.host}${basePath}`;
+    let normalized = query ? `${base}?${query}` : base;
+    if (hash) normalized += hash;
+
+    return cleanup.lowercase ? normalized.toLowerCase() : normalized;
   } catch {
-    return url.toLowerCase().trim();
+    return fallback;
   }
 }
 
@@ -2152,9 +2227,19 @@ function renderDuplicates(container, duplicateGroups) {
     className: 'duplicate-normalize-toggle',
   });
   const checkbox = createEl('input', { attrs: { type: 'checkbox' } });
-  checkbox.checked = state.aggressiveNormalization;
-  checkbox.addEventListener('change', () => {
-    state.aggressiveNormalization = checkbox.checked;
+  const cleanup = getUrlCleanupSettings();
+  checkbox.checked = cleanup.enabled && cleanup.stripTrackingParams;
+  checkbox.addEventListener('change', async () => {
+    const nextSettings = {
+      ...(state.settings || {}),
+      urlCleanup: {
+        ...cleanup,
+        enabled: true,
+        stripTrackingParams: checkbox.checked,
+      },
+    };
+
+    await saveSettings(nextSettings);
     render();
   });
   const label = createEl('span', {
@@ -2566,7 +2651,7 @@ function render() {
 }
 
 async function init() {
-  await loadData();
+  await Promise.all([loadSettings(), loadData()]);
   render();
 }
 
@@ -2576,6 +2661,12 @@ document.addEventListener('DOMContentLoaded', init);
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'laterlist:updateView') {
     loadData().then(() => render());
+  }
+});
+
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName === 'local' && changes.laterlistSettings) {
+    loadSettings().then(() => render());
   }
 });
 

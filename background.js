@@ -1,10 +1,30 @@
 // background.js
 // Core data store and background services for LaterList.
 
+const DEFAULT_URL_CLEANUP = {
+  enabled: true,
+  stripTrackingParams: true,
+  trackingParamNames: ['ref', 'ref_src', 'igshid'],
+  trackingParamPrefixes: ['utm_', 'icid', 'fbclid', 'gclid', 'mc_eid'],
+  ignoreHashPatterns: ['^slot=\\d+$'],
+  pathRewriteRules: [
+    { pattern: '^/models/([^/]+)(?:/.*)?$', replace: '/models/$1' },
+  ],
+  trimTrailingSlash: true,
+  lowercase: true,
+};
+
 const DEFAULT_SETTINGS = {
   containerNameFormat: 'ddd, MMM DD, YYYY at HHmm Hrs',
   sendAllTabsDestination: '', // Empty means first tab
+  urlCleanup: DEFAULT_URL_CLEANUP,
 };
+
+function mergeSettings(raw = {}) {
+  const merged = { ...DEFAULT_SETTINGS, ...raw };
+  merged.urlCleanup = { ...DEFAULT_URL_CLEANUP, ...(raw.urlCleanup || {}) };
+  return merged;
+}
 
 const DEFAULT_DATA = {
   tabs: [
@@ -49,7 +69,7 @@ async function saveData(data) {
 
 async function getSettings() {
   const stored = await chrome.storage.local.get('laterlistSettings');
-  return { ...DEFAULT_SETTINGS, ...(stored.laterlistSettings || {}) };
+  return mergeSettings(stored.laterlistSettings || {});
 }
 
 // Simple date formatter
@@ -500,25 +520,90 @@ function absolutizeUrl(url, base) {
 }
 
 // --- Action badge & title for saved pages ---
-function normalizeUrlForMatch(url) {
+function normalizeUrlWithSettings(url, cleanup) {
+  const rules = { ...DEFAULT_URL_CLEANUP, ...(cleanup || {}) };
+  const fallback = rules.lowercase
+    ? (url || '').toLowerCase().trim()
+    : (url || '').trim();
+
+  if (!rules.enabled) return fallback;
+
   try {
     const u = new URL(url);
-    // Ignore hash fragment when matching
-    u.hash = '';
-    return u.toString();
+    const params = new URLSearchParams(u.search);
+
+    if (rules.stripTrackingParams) {
+      const names = rules.trackingParamNames || [];
+      const prefixes = rules.trackingParamPrefixes || [];
+      [...params.keys()].forEach(key => {
+        if (
+          names.includes(key) ||
+          prefixes.some(prefix => prefix && key.startsWith(prefix))
+        ) {
+          params.delete(key);
+        }
+      });
+    }
+
+    let path = u.pathname || '/';
+    if (Array.isArray(rules.pathRewriteRules)) {
+      rules.pathRewriteRules.forEach(rule => {
+        if (!rule || !rule.pattern) return;
+        try {
+          const regex = new RegExp(rule.pattern, 'i');
+          if (regex.test(path)) {
+            path = path.replace(regex, rule.replace || '');
+          }
+        } catch (err) {
+          console.warn('[LaterList] Invalid path rewrite rule:', rule, err);
+        }
+      });
+    }
+
+    if (rules.trimTrailingSlash !== false) {
+      path = path.replace(/\/+$/, '') || '/';
+    }
+
+    let hash = u.hash || '';
+    const hashValue = hash.startsWith('#') ? hash.slice(1) : hash;
+    if (Array.isArray(rules.ignoreHashPatterns)) {
+      for (const pattern of rules.ignoreHashPatterns) {
+        if (!pattern) continue;
+        try {
+          const regex = new RegExp(pattern, 'i');
+          if (regex.test(hashValue)) {
+            hash = '';
+            break;
+          }
+        } catch (err) {
+          console.warn('[LaterList] Invalid hash ignore rule:', pattern, err);
+        }
+      }
+    }
+
+    const query = params.toString();
+    const basePath = path || '/';
+    const base = `${u.protocol}//${u.host}${basePath}`;
+    let normalized = query ? `${base}?${query}` : base;
+    if (hash) normalized += hash;
+
+    return rules.lowercase ? normalized.toLowerCase() : normalized;
   } catch {
-    return url || '';
+    return fallback;
   }
 }
 
 async function isUrlSaved(url) {
   if (!url) return false;
-  const target = normalizeUrlForMatch(url);
+  const settings = await getSettings();
+  const normalize = target =>
+    normalizeUrlWithSettings(target, settings.urlCleanup);
+  const target = normalize(url);
   const data = await getData();
   for (const tab of data.tabs) {
     for (const container of tab.containers) {
       for (const link of container.links) {
-        if (normalizeUrlForMatch(link.url) === target) return true;
+        if (normalize(link.url) === target) return true;
       }
     }
   }

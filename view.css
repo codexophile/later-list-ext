@@ -612,6 +612,39 @@ h1 {
   border: 1px solid var(--accent);
 }
 
+.status-overlay-duplicates {
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 8px;
+  padding: 10px;
+  margin-bottom: 12px;
+}
+
+.status-overlay-duplicates .status-overlay-label {
+  color: var(--warning);
+  margin-bottom: 8px;
+}
+
+.status-overlay-duplicate-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.status-overlay-duplicate-item {
+  display: flex;
+  align-items: center;
+  padding: 4px 8px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.duplicate-location {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
 .status-overlay-image {
   width: 100%;
   height: auto;

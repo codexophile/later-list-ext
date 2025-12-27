@@ -6,6 +6,7 @@ let state = {
   data: null,
   activeTabId: null,
   duplicateUrls: new Set(),
+  duplicateGroups: new Map(),
   viewMode: 'links',
   settings: null,
   bulkMode: false,
@@ -142,6 +143,22 @@ function showStatusOverlay(linkData) {
   console.log('[LaterList] Showing status overlay for link:', linkData);
 
   let content = `<div class="status-overlay-title">${linkData.title}</div>`;
+
+  // Check if this is a duplicate and show other locations
+  const normalized = normalizeUrl(linkData.url);
+  const duplicateGroup = state.duplicateGroups.get(normalized);
+  if (duplicateGroup && duplicateGroup.length > 1) {
+    content += `<div class="status-overlay-section status-overlay-duplicates">`;
+    content += `<div class="status-overlay-label">⚠️ Duplicate Found (${duplicateGroup.length} instances)</div>`;
+    content += `<div class="status-overlay-duplicate-list">`;
+    duplicateGroup.forEach(dup => {
+      content += `<div class="status-overlay-duplicate-item">`;
+      content += `<span class="duplicate-location">${dup.tabName} › ${dup.containerName}</span>`;
+      content += `</div>`;
+    });
+    content += `</div>`;
+    content += `</div>`;
+  }
 
   // Add image gallery if available
   const images =
@@ -2485,6 +2502,12 @@ async function refreshMissingImages(limit = 50) {
 function render() {
   const duplicateGroups = collectDuplicateGroups();
   state.duplicateUrls = new Set(duplicateGroups.map(group => group.normalized));
+
+  // Store duplicate groups indexed by normalized URL for easy lookup
+  state.duplicateGroups = new Map();
+  duplicateGroups.forEach(group => {
+    state.duplicateGroups.set(group.normalized, group.links);
+  });
 
   const app = document.getElementById('app');
   app.innerHTML = '';

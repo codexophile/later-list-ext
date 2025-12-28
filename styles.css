@@ -1,145 +1,262 @@
-/* Styles for LaterList extension */
+/* Popup visual system */
+:root {
+  --bg: #0b1220;
+  --panel: #0f1828;
+  --panel-strong: #101d32;
+  --stroke: #1f2a3a;
+  --muted: #9fb1c7;
+  --text: #e6edf3;
+  --primary: #2dd4bf;
+  --primary-strong: #10b981;
+  --accent: #f59e0b;
+  --chip: #152236;
+  --shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
+  --radius-lg: 14px;
+  --radius-md: 9px;
+  --radius-sm: 6px;
+  --font: 'Manrope', 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+
+html,
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
-    'Helvetica Neue', Arial, sans-serif;
-  background: linear-gradient(135deg, #0f1419 0%, #1a1f2e 100%);
-  color: #e6edf3;
+  width: 380px;
+  max-width: 420px;
+  overflow: hidden;
+}
+
+body.popup-body {
   margin: 0;
-  min-width: 360px;
+  min-width: 320px;
+  max-width: 420px;
+  height: auto;
+  background: radial-gradient(
+      circle at 20% 20%,
+      rgba(45, 212, 191, 0.12),
+      transparent 22%
+    ),
+    radial-gradient(circle at 80% 0%, rgba(245, 158, 11, 0.12), transparent 25%),
+    linear-gradient(145deg, #0b1220 0%, #0e1625 40%, #0a0f1c 100%);
+  color: var(--text);
+  font-family: var(--font);
+  padding: 8px;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
-#tabs-container {
-  margin: 20px;
-}
-
-.actions {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-button {
-  padding: 8px 12px;
-  border: 1px solid #333;
-  border-radius: 4px;
-  background: #fff;
-  cursor: pointer;
-}
-
-button:hover {
-  background: #e6e6e6;
-}
-
-/* laterlist-popup (shared look with content.js mini popup) */
-.laterlist-popup {
-  position: fixed;
-  background: linear-gradient(135deg, #1a1f2e 0%, #252d3d 100%);
-  border: 1px solid #30363d;
-  border-radius: 16px;
-  padding: 20px;
-  z-index: 2147483646;
-  color: #e6edf3;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
-    'Helvetica Neue', Arial, sans-serif;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 0 2px 8px rgba(0, 0, 0, 0.2);
-  max-width: 360px;
+.laterlist-shell {
+  background: linear-gradient(
+    145deg,
+    rgba(26, 38, 58, 0.8),
+    rgba(16, 28, 46, 0.9)
+  );
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  padding: 9px;
+  display: grid;
+  gap: 10px;
+  max-width: 380px;
   width: 100%;
-  transition: all 0.2s ease;
-  opacity: 0;
+  overflow: hidden;
+  max-height: none;
 }
 
-/* In the extension popup we want a normal panel, not a floating overlay. */
-.laterlist-popup--panel {
-  position: relative;
-  left: auto;
-  top: auto;
-  opacity: 1;
-  max-width: none;
-  width: auto;
+.laterlist-head {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 6px;
+}
+
+@media (max-width: 420px) {
+  .laterlist-head {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+  .laterlist-head > * {
+    justify-self: flex-start;
+  }
+  .laterlist-head button {
+    width: 100%;
+  }
+}
+
+.laterlist-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.brand-mark {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--primary), var(--accent));
+  box-shadow: 0 0 0 6px rgba(45, 212, 191, 0.12);
+}
+
+.brand-text {
+  display: grid;
+  gap: 2px;
+}
+
+.brand-name {
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.brand-sub {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.link-pill {
+  justify-self: center;
+  background: rgba(45, 212, 191, 0.12);
+  border: 1px solid rgba(45, 212, 191, 0.4);
+  color: var(--text);
+  padding: 5px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.panel {
+  background: linear-gradient(145deg, var(--panel), var(--panel-strong));
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius-md);
+  padding: 9px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+  min-width: 0;
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.panel-title {
+  font-weight: 600;
+}
+
+.eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.link-panel .laterlist-popup__title {
+  margin: 6px 0 4px;
 }
 
 .laterlist-popup__title {
-  font-weight: 600;
-  font-size: 16px;
-  margin-bottom: 12px;
-  color: #e6edf3;
+  font-weight: 700;
+  font-size: 15px;
+  margin-bottom: 3px;
+  color: var(--text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  background: linear-gradient(135deg, #6366f1 0%, #7c3aed 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  min-width: 0;
 }
 
 .laterlist-popup__url {
   font-size: 12px;
-  color: #9198a1;
-  margin-bottom: 20px;
+  color: var(--muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  padding: 8px 12px;
-  background: rgba(99, 102, 241, 0.05);
-  border-radius: 6px;
-  border: 1px solid #30363d;
+  padding: 7px 9px;
+  font-size: 11px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--stroke);
 }
 
 .laterlist-popup__select-wrapper {
   display: grid;
-  gap: 14px;
-  margin-bottom: 20px;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  min-width: 0;
 }
 
 .laterlist-popup__select {
   width: 100%;
-  padding: 10px 14px;
-  background: #252d3d;
-  border: 1px solid #30363d;
-  border-radius: 8px;
-  color: #e6edf3;
+  padding: 8px 10px;
+  background: rgba(18, 27, 44, 0.9);
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius-sm);
+  color: var(--text);
   font-size: 14px;
   cursor: pointer;
   outline: none;
   transition: all 0.2s ease;
-  font-family: inherit;
+  font-family: var(--font);
+  min-width: 0;
 }
 
 .laterlist-popup__select:hover {
-  border-color: #484f58;
-  background: #2a3344;
+  border-color: rgba(45, 212, 191, 0.5);
+  background: rgba(21, 33, 52, 0.95);
 }
 
 .laterlist-popup__select:focus {
-  border-color: #6366f1;
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.18);
 }
 
-.laterlist-popup__button-container {
+.actions-panel {
+  display: grid;
+  gap: 8px;
+}
+
+.primary-actions {
   display: flex;
-  gap: 10px;
+  gap: 6px;
   justify-content: flex-end;
-  margin-top: 20px;
+  flex-wrap: wrap;
+  width: 100%;
+}
+
+.primary-actions .laterlist-popup__button {
+  flex: 1 1 110px;
+  min-width: 110px;
+  max-width: 100%;
+}
+
+.secondary-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  width: 100%;
+}
+
+.single-action {
+  display: flex;
+  justify-content: flex-start;
 }
 
 .laterlist-popup__button {
-  padding: 10px 16px;
-  border: 1px solid #30363d;
-  border-radius: 8px;
-  font-size: 13px;
-  font-weight: 500;
+  padding: 7px 11px;
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
-  background: #252d3d;
-  color: #e6edf3;
-  font-family: inherit;
+  background: rgba(21, 33, 52, 0.9);
+  color: var(--text);
+  font-family: var(--font);
 }
 
 .laterlist-popup__button:hover {
-  background: #2a3344;
-  border-color: #484f58;
   transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  border-color: rgba(45, 212, 191, 0.6);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.22);
 }
 
 .laterlist-popup__button:active {
@@ -147,39 +264,61 @@ button:hover {
 }
 
 .laterlist-popup__button--primary {
-  background: linear-gradient(135deg, #6366f1 0%, #7c3aed 100%);
-  border-color: #6366f1;
-  color: white;
+  background: linear-gradient(135deg, var(--primary), var(--primary-strong));
+  border-color: rgba(45, 212, 191, 0.9);
+  color: #041117;
 }
 
 .laterlist-popup__button--primary:hover {
-  background: linear-gradient(135deg, #7c3aed 0%, #8b5cf6 100%);
-  border-color: #7c3aed;
+  box-shadow: 0 10px 24px rgba(45, 212, 191, 0.35);
+}
+
+.laterlist-popup__button--ghost {
+  background: transparent;
+  border-color: var(--stroke);
+  color: var(--text);
+}
+
+.laterlist-popup__chip {
+  border: 1px solid var(--stroke);
+  background: var(--chip);
+  color: var(--text);
+  padding: 6px 9px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex: 1 1 100px;
+  max-width: 120px;
+  min-width: 0;
+}
+
+.laterlist-popup__chip:hover {
+  border-color: rgba(45, 212, 191, 0.5);
+  transform: translateY(-1px);
 }
 
 .laterlist-popup__status {
-  margin-top: 16px;
+  margin-top: 4px;
   font-size: 13px;
   min-height: 1.2em;
-  color: #9198a1;
+  color: var(--text);
   padding: 10px 12px;
-  background: rgba(99, 102, 241, 0.05);
-  border-radius: 6px;
+  background: rgba(31, 42, 58, 0.8);
+  border: 1px solid var(--stroke);
+  border-radius: var(--radius-sm);
   text-align: center;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
-.laterlist-popup__button--primary {
-  background: #88c0d0;
-  color: #2e3440;
+/* Keep legacy class for scripts that rely on it */
+.laterlist-popup {
+  position: relative;
+  opacity: 1;
 }
 
-.laterlist-popup__button--primary:hover {
-  background: #8fcfdf;
-}
-
-.laterlist-popup__status {
-  margin-top: 10px;
-  font-size: 0.9em;
-  min-height: 1.2em;
-  opacity: 0.9;
+.laterlist-popup--panel {
+  max-width: none;
+  width: auto;
 }

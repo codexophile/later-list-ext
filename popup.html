@@ -1,41 +1,63 @@
-<div id="total-links" class="laterlist-popup__total-links">Total Links: <span id="link-count">0</span></div>
 <!DOCTYPE html>
 <html>
 
 <head>
   <title>LaterList</title>
+  <meta charset="UTF-8">
   <link rel="stylesheet" href="styles.css">
 </head>
 
-<body>
-  <div class="laterlist-popup laterlist-popup--panel" id="laterlist-panel">
-    <div class="laterlist-popup__title" id="page-title">Loading…</div>
-    <div class="laterlist-popup__url" id="page-url"></div>
+<body class="popup-body">
+  <div class="laterlist-shell laterlist-popup laterlist-popup--panel" id="laterlist-panel">
+    <header class="laterlist-head">
+      <div class="laterlist-brand">
+        <span class="brand-mark"></span>
+        <div class="brand-text">
+          <div class="brand-name">LaterList</div>
+          <div class="brand-sub">Save this tab fast</div>
+        </div>
+      </div>
+      <div class="link-pill" aria-live="polite">Links: <span id="link-count">0</span></div>
+      <button class="laterlist-popup__button laterlist-popup__button--ghost" id="open-view">Open Full View</button>
+    </header>
 
-    <div class="laterlist-popup__select-wrapper">
-      <select id="tab-select" class="laterlist-popup__select" aria-label="Select tab"></select>
-      <select id="container-select" class="laterlist-popup__select" aria-label="Select container"></select>
-    </div>
+    <section class="panel link-panel">
+      <div class="eyebrow">You're saving</div>
+      <div class="laterlist-popup__title" id="page-title">Loading...</div>
+      <div class="laterlist-popup__url" id="page-url"></div>
+    </section>
 
-    <div class="laterlist-popup__button-container">
-      <button class="laterlist-popup__button" id="open-view">Open Full View</button>
-      <button class="laterlist-popup__button" id="save-close">Save and close</button>
-      <button class="laterlist-popup__button laterlist-popup__button--primary" id="save-current">Save</button>
-    </div>
+    <section class="panel">
+      <div class="panel-head">
+        <div>
+          <div class="eyebrow">Destination</div>
+          <div class="panel-title">Choose tab and container</div>
+        </div>
+      </div>
+      <div class="laterlist-popup__select-wrapper">
+        <select id="tab-select" class="laterlist-popup__select" aria-label="Select tab"></select>
+        <select id="container-select" class="laterlist-popup__select" aria-label="Select container"></select>
+      </div>
+    </section>
 
-    <div class="laterlist-popup__button-container"
-      style="margin-top: 10px; border-top: 1px solid #333; padding-top: 10px;">
-      <button class="laterlist-popup__button" id="send-tabs-before"
-        title="Send tabs before current tab (Ctrl+Shift+Left)">Tabs Before</button>
-      <button class="laterlist-popup__button" id="send-all-tabs"
-        title="Send all browser tabs to LaterList (Ctrl+Shift+S)">Send All</button>
-      <button class="laterlist-popup__button" id="send-tabs-after"
-        title="Send tabs after current tab (Ctrl+Shift+Right)">Tabs After</button>
-    </div>
-
-    <div class="laterlist-popup__button-container" style="margin-top: 8px; padding-top: 8px;">
-      <button class="laterlist-popup__button" id="open-settings" title="Open settings">Settings</button>
-    </div>
+    <section class="panel actions-panel">
+      <div class="primary-actions">
+        <button class="laterlist-popup__button" id="save-close">Save and close</button>
+        <button class="laterlist-popup__button laterlist-popup__button--primary" id="save-current">Save</button>
+      </div>
+      <div class="secondary-actions">
+        <button class="laterlist-popup__chip" id="send-tabs-before"
+          title="Send tabs before current tab (Ctrl+Shift+Left)">Tabs Before</button>
+        <button class="laterlist-popup__chip" id="send-all-tabs"
+          title="Send all browser tabs to LaterList (Ctrl+Shift+S)">Send All</button>
+        <button class="laterlist-popup__chip" id="send-tabs-after"
+          title="Send tabs after current tab (Ctrl+Shift+Right)">Tabs After</button>
+      </div>
+      <div class="single-action">
+        <button class="laterlist-popup__button laterlist-popup__button--ghost" id="open-settings"
+          title="Open settings">Settings</button>
+      </div>
+    </section>
 
     <div class="laterlist-popup__status" id="status" aria-live="polite"></div>
   </div>

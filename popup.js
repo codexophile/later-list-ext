@@ -565,10 +565,15 @@ document.addEventListener('DOMContentLoaded', async () => {
       });
     }
 
-    document.getElementById('link-count').textContent = totalLinks;
+    const pill = document.getElementById('link-count');
+    if (pill) pill.textContent = totalLinks;
   }
 
-  await updateLinkCount();
+  try {
+    await updateLinkCount();
+  } catch {
+    // Non-blocking if count fails
+  }
 
   document.getElementById('open-view')?.addEventListener('click', () => {
     chrome.runtime.openOptionsPage();

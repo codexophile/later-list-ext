@@ -168,8 +168,8 @@ async function extractPreview(tabId) {
       publishedAt: meta?.publishedAt || null,
       keywords: meta?.keywords || null,
     };
-    // Reset selected images when preview is refreshed
-    selectedImageUrls = imageUrls.length > 0 ? [imageUrls[0]] : [];
+    // Reset selected images - select ALL by default
+    selectedImageUrls = [...imageUrls];
     renderPreview();
   } catch {}
 }
@@ -182,6 +182,7 @@ function renderPreview() {
   const imagesEl = document.getElementById('preview-images');
   const dateEl = document.getElementById('preview-date');
   const keywordsEl = document.getElementById('preview-keywords');
+  const summaryEl = document.getElementById('preview-summary');
 
   if (thumb) {
     thumb.classList.remove('skeleton');
@@ -235,14 +236,11 @@ function renderPreview() {
       imagesEl.appendChild(wrapper);
     });
 
-    // Auto-select first image if none selected
-    if (
-      selectedImageUrls.length === 0 &&
-      (previewData.imageUrls || []).length > 0
-    ) {
-      selectedImageUrls.push(previewData.imageUrls[0]);
-      const firstCheckbox = imagesEl.querySelector('.image-checkbox');
-      if (firstCheckbox) firstCheckbox.checked = true;
+    // Auto-select all images by default
+    if (selectedImageUrls.length === 0 && (previewData.imageUrls || []).length > 0) {
+      selectedImageUrls = [...previewData.imageUrls];
+      const checkboxes = imagesEl.querySelectorAll('.image-checkbox');
+      checkboxes.forEach(cb => (cb.checked = true));
     }
   }
   if (dateEl) {
@@ -257,6 +255,26 @@ function renderPreview() {
   if (keywordsEl) {
     keywordsEl.textContent = previewData.keywords || '';
   }
+  if (summaryEl) {
+    if (previewData.summary) {
+      summaryEl.textContent = previewData.summary;
+      summaryEl.style.display = 'block';
+    } else {
+      summaryEl.style.display = 'none';
+    }
+  }
+}
+
+function selectAllImages() {
+  selectedImageUrls = [...previewData.imageUrls];
+  const checkboxes = document.querySelectorAll('.image-checkbox');
+  checkboxes.forEach(cb => (cb.checked = true));
+}
+
+function deselectAllImages() {
+  selectedImageUrls = [];
+  const checkboxes = document.querySelectorAll('.image-checkbox');
+  checkboxes.forEach(cb => (cb.checked = false));
 }
 
 async function loadCurrentTab() {
@@ -825,6 +843,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('open-settings')?.addEventListener('click', () => {
     chrome.tabs.create({ url: 'settings.html' });
   });
+
+  document.getElementById('select-all-images')?.addEventListener('click', selectAllImages);
+  document.getElementById('deselect-all-images')?.addEventListener('click', deselectAllImages);
 
   try {
     await loadCurrentTab();

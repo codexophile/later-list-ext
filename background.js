@@ -1413,6 +1413,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .catch(() => sendResponse({ settings: mergeSettings() }));
     return true;
   }
+  if (message?.type === 'laterlist:extractFromTab') {
+    (async () => {
+      try {
+        const settings = await getSettings();
+        const rule = getActiveImageRule(settings, message.url);
+        const extracted = await extractFromTab(
+          message.tabId,
+          message.url,
+          rule
+        );
+        sendResponse({ extracted });
+      } catch (err) {
+        console.warn('[LaterList] extractFromTab failed:', err);
+        sendResponse({ extracted: null, error: err?.message });
+      }
+    })();
+    return true;
+  }
   if (message?.type === 'laterlist:addLink') {
     addLink(message.payload)
       .then(link => {

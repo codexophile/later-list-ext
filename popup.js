@@ -54,124 +54,33 @@ function populateSelect(selectEl, options, selectedId) {
   });
 }
 
-// Extract lightweight preview info from the active tab
+// Extract lightweight preview info from the active tab using background extraction with image rules
 async function extractPreview(tabId) {
   if (typeof tabId !== 'number') return;
   try {
-    const imgResults = await chrome.scripting.executeScript({
-      target: { tabId },
-      function: () => {
-        const isSvg = url => {
-          const u = (url || '').trim().toLowerCase();
-          return u.endsWith('.svg') || u.startsWith('data:image/svg');
-        };
-        const candidates = [];
-        const seen = new Set();
-        const add = url => {
-          if (!url) return;
-          const trimmed = url.trim();
-          if (!trimmed || seen.has(trimmed)) return;
-          if (
-            trimmed.startsWith('data:') ||
-            trimmed.startsWith('about:') ||
-            trimmed.startsWith('javascript:')
-          )
-            return;
-          if (isSvg(trimmed)) return;
-          seen.add(trimmed);
-          candidates.push(trimmed);
-        };
-        const visibleEnough = img => {
-          if (
-            !img.complete ||
-            img.naturalWidth === 0 ||
-            img.naturalHeight === 0
-          )
-            return false;
-          const w = img.naturalWidth || img.width || 0;
-          const h = img.naturalHeight || img.height || 0;
-          if (w < 96 || h < 96) return false;
-          const ratio = w / h;
-          return ratio > 0.3 && ratio < 3.5 && img.offsetParent !== null;
-        };
-        document.querySelectorAll('img').forEach(img => {
-          if (!visibleEnough(img)) return;
-          const src = img.currentSrc || img.src || img.getAttribute('data-src');
-          add(src);
-        });
-        [
-          'meta[property="og:image"]',
-          'meta[name="twitter:image"]',
-          'meta[name="twitter:image:src"]',
-        ].forEach(sel => {
-          const el = document.querySelector(sel);
-          if (el?.content && !isSvg(el.content)) add(el.content);
-        });
-        const icon = document.querySelector('link[rel*="icon"]');
-        if (icon?.href && !isSvg(icon.href)) add(icon.href);
-        return candidates;
-      },
+    // Request extraction from background - it will apply image rules
+    const result = await chrome.runtime.sendMessage({
+      type: 'laterlist:extractFromTab',
+      tabId,
+      url: currentPage.url,
     });
-    const imageUrls = imgResults?.[0]?.result || [];
 
-    const metaResults = await chrome.scripting.executeScript({
-      target: { tabId },
-      function: () => {
-        const extractJsonLd = () => {
-          const scripts = document.querySelectorAll(
-            'script[type="application/ld+json"]'
-          );
-          for (const script of scripts) {
-            try {
-              const data = JSON.parse(script.textContent);
-              if (data) return Array.isArray(data) ? data[0] : data;
-            } catch {}
-          }
-          return null;
-        };
-        const jsonLd = extractJsonLd();
-        const description =
-          jsonLd?.description ||
-          document.querySelector('meta[name="description"]')?.content ||
-          document.querySelector('meta[property="og:description"]')?.content ||
-          null;
-        const publishedCandidates = [
-          document.querySelector('meta[property="article:published_time"]')
-            ?.content,
-          document.querySelector('meta[name="publish_date"]')?.content,
-          document.querySelector('meta[name="date"]')?.content,
-          document.querySelector('meta[property="og:published_time"]')?.content,
-          jsonLd?.datePublished,
-        ].filter(Boolean);
-        let publishedAt = null;
-        for (const v of publishedCandidates) {
-          const ts = new Date(v).getTime();
-          if (!isNaN(ts)) {
-            publishedAt = ts;
-            break;
-          }
-        }
-        const keywords =
-          jsonLd?.keywords ||
-          document.querySelector('meta[name="keywords"]')?.content ||
-          null;
-        return { description, publishedAt, keywords };
-      },
-    });
-    const meta = metaResults?.[0]?.result || {};
-
-    previewData = {
-      imageUrl: imageUrls[0] || null,
-      imageUrls,
-      description: meta?.description || null,
-      summary: null,
-      publishedAt: meta?.publishedAt || null,
-      keywords: meta?.keywords || null,
-    };
-    // Reset selected images - select ALL by default
-    selectedImageUrls = [...imageUrls];
-    renderPreview();
-  } catch {}
+    if (result?.extracted) {
+      previewData = {
+        imageUrl: result.extracted.imageUrl || null,
+        imageUrls: result.extracted.imageUrls || [],
+        description: result.extracted.description || null,
+        summary: result.extracted.summary || null,
+        publishedAt: result.extracted.publishedAt || null,
+        keywords: result.extracted.keywords || null,
+      };
+      // Reset selected images - select ALL by default
+      selectedImageUrls = [...(result.extracted.imageUrls || [])];
+      renderPreview();
+    }
+  } catch (err) {
+    console.warn('[LaterList Popup] Preview extraction failed:', err);
+  }
 }
 
 function renderPreview() {
@@ -344,165 +253,7 @@ async function saveToSelection({ closeTabAfterSave }) {
 
   setBusy(true);
   try {
-    // Extract images from the current tab
-    let imageUrls = [];
-    let imageUrl = null;
-    if (typeof currentPage.tabId === 'number') {
-      try {
-        const results = await chrome.scripting.executeScript({
-          target: { tabId: currentPage.tabId },
-          function: async () => {
-            const testImageUrl = (url, timeout = 3000) => {
-              return new Promise(resolve => {
-                const img = new Image();
-                const MIN_DIM = 128;
-                const timer = setTimeout(() => {
-                  img.onload = null;
-                  img.onerror = null;
-                  resolve(false);
-                }, timeout);
-
-                img.onload = () => {
-                  clearTimeout(timer);
-                  resolve(
-                    img.naturalWidth >= MIN_DIM && img.naturalHeight >= MIN_DIM
-                  );
-                };
-
-                img.onerror = () => {
-                  clearTimeout(timer);
-                  resolve(false);
-                };
-
-                img.src = url;
-              });
-            };
-
-            const candidates = [];
-            const seen = new Set();
-            const isSvg = url => {
-              const u = url.trim().toLowerCase();
-              return u.endsWith('.svg') || u.startsWith('data:image/svg');
-            };
-            const add = url => {
-              if (!url) return;
-              const trimmed = url.trim();
-              if (!trimmed || seen.has(trimmed)) return;
-              if (
-                trimmed.startsWith('data:') ||
-                trimmed.startsWith('about:') ||
-                trimmed.startsWith('javascript:')
-              )
-                return;
-              if (isSvg(trimmed)) return;
-              seen.add(trimmed);
-              candidates.push(trimmed);
-            };
-
-            const visibleEnough = img => {
-              if (
-                !img.complete ||
-                img.naturalWidth === 0 ||
-                img.naturalHeight === 0
-              )
-                return false;
-              const w = img.naturalWidth || img.width || 0;
-              const h = img.naturalHeight || img.height || 0;
-              if (w < 128 || h < 128) return false;
-              const ratio = w / h;
-              return ratio > 0.3 && ratio < 3.5 && img.offsetParent !== null;
-            };
-
-            const isInExcludedContext = img => {
-              const selectors = [
-                'nav',
-                'header',
-                'footer',
-                'aside',
-                'form',
-                'button',
-                '[role="navigation"]',
-                '[role="banner"]',
-                '[role="contentinfo"]',
-                '[role="toolbar"]',
-                '[role="tablist"]',
-                '[aria-label*="breadcrumb" i]',
-                '.sidebar',
-                '.menu',
-              ];
-              return Boolean(img.closest(selectors.join(',')));
-            };
-
-            document.querySelectorAll('img').forEach(img => {
-              if (!visibleEnough(img)) return;
-              if (isInExcludedContext(img)) return;
-              const src =
-                img.currentSrc || img.src || img.getAttribute('data-src');
-              add(src);
-            });
-
-            const metaSelectors = [
-              'meta[property="og:image"]',
-              'meta[name="twitter:image"]',
-              'meta[name="twitter:image:src"]',
-            ];
-            const isBlockedMeta = url => {
-              const lowered = url.trim().toLowerCase();
-              const pattern = /logo|icon|sprite|favicon|social|share/;
-              if (pattern.test(lowered)) return true;
-              try {
-                const parsed = new URL(url, location.href);
-                const path = parsed.pathname.toLowerCase();
-                if (path.includes('favicon')) return true;
-                const file = path.split('/').pop() || '';
-                return pattern.test(file);
-              } catch {
-                return false;
-              }
-            };
-            const metaUrls = [];
-            metaSelectors.forEach(sel => {
-              const el = document.querySelector(sel);
-              if (el?.content) {
-                const val = el.content.trim();
-                if (!seen.has(val) && !isSvg(val) && !isBlockedMeta(val)) {
-                  metaUrls.push(val);
-                }
-              }
-            });
-
-            const icon = document.querySelector('link[rel*="icon"]');
-            if (icon?.href) {
-              const val = icon.href;
-              if (!seen.has(val) && !isSvg(val)) {
-                metaUrls.push(val);
-              }
-            }
-
-            const validationPromises = metaUrls.map(async url => {
-              const isValid = await testImageUrl(url);
-              return isValid ? url : null;
-            });
-
-            const validatedMeta = (
-              await Promise.all(validationPromises)
-            ).filter(Boolean);
-
-            return [...validatedMeta, ...candidates];
-          },
-        });
-        imageUrls = results?.[0]?.result || [];
-        imageUrl = imageUrls[0] || null;
-        console.log('[LaterList] Extracted image URLs:', imageUrls);
-      } catch (error) {
-        // If extraction fails, continue without images
-        console.log('[LaterList] Image extraction failed:', error);
-        imageUrls = [];
-        imageUrl = null;
-      }
-    }
-
-    // Extract metadata from the current tab
+    // Extract metadata from the current tab (images already extracted in preview via background)
     let publishedAt = null;
     let description = null;
     let summary = null;
@@ -666,9 +417,11 @@ async function saveToSelection({ closeTabAfterSave }) {
       }
     }
 
-    // Use selected images instead of all extracted images
+    // Use selected images if user manually chose them, otherwise let background extract with rules
     const finalImageUrls =
-      selectedImageUrls.length > 0 ? selectedImageUrls : imageUrls;
+      selectedImageUrls.length > 0
+        ? selectedImageUrls
+        : previewData.imageUrls || [];
     const finalImageUrl = finalImageUrls.length > 0 ? finalImageUrls[0] : null;
 
     const result = await chrome.runtime.sendMessage({

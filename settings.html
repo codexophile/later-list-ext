@@ -5,50 +5,141 @@
   <title>LaterList Settings</title>
   <link rel="stylesheet" href="styles.css">
   <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
     body {
-      padding: 20px;
-      max-width: 700px;
-      margin: 0 auto;
+      margin: 0;
+      padding: 0;
       font-family: system-ui, -apple-system, sans-serif;
       background: #1a1a1a;
       color: #e0e0e0;
+      height: 100%;
+      width: 100%;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .settings-container {
+      display: flex;
+      flex: 1;
+      height: 100%;
+      overflow: hidden;
     }
 
     .settings-header {
-      margin-bottom: 30px;
-      padding-bottom: 15px;
-      border-bottom: 2px solid #333;
+      padding: 16px 20px;
+      border-bottom: 1px solid #333;
+      background: #0f0f0f;
+      flex-shrink: 0;
     }
 
     .settings-header h1 {
-      margin: 0 0 5px 0;
-      font-size: 24px;
+      margin: 0 0 4px 0;
+      font-size: 20px;
       color: #fff;
     }
 
     .settings-header p {
       margin: 0;
       color: #999;
-      font-size: 14px;
+      font-size: 13px;
     }
 
-    .setting-section {
+    .settings-sidebar {
+      width: 180px;
       background: #242424;
-      padding: 20px;
-      margin-bottom: 20px;
-      border-radius: 8px;
-      border: 1px solid #333;
+      border-right: 1px solid #333;
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      overflow-y: auto;
     }
 
-    .setting-section h2 {
-      margin: 0 0 15px 0;
-      font-size: 16px;
+    .settings-tabs {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      padding: 8px;
+    }
+
+    .settings-tab {
+      padding: 12px 16px;
+      background: transparent;
+      border: none;
+      border-left: 3px solid transparent;
+      color: #999;
+      cursor: pointer;
+      text-align: left;
+      font-size: 14px;
+      font-weight: 500;
+      transition: all 0.15s ease;
+      border-radius: 0;
+    }
+
+    .settings-tab:hover {
+      background: rgba(255, 255, 255, 0.05);
+      color: #ccc;
+    }
+
+    .settings-tab.active {
+      background: rgba(74, 158, 255, 0.1);
+      border-left-color: #4a9eff;
+      color: #fff;
+    }
+
+    .settings-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+    }
+
+    .settings-content-wrapper {
+      padding: 24px;
+      display: none;
+      flex-direction: column;
+      gap: 20px;
+      height: 100%;
+      overflow-y: auto;
+    }
+
+    .settings-content-wrapper.active {
+      display: flex;
+    }
+
+    .settings-content-header {
+      margin-bottom: 8px;
+    }
+
+    .settings-content-header h2 {
+      margin: 0;
+      font-size: 18px;
       color: #fff;
       font-weight: 600;
     }
 
+    .settings-content-header p {
+      margin: 4px 0 0 0;
+      font-size: 13px;
+      color: #999;
+    }
+
+    .setting-section {
+      display: contents;
+    }
+
     .setting-group {
-      margin-bottom: 15px;
+      margin-bottom: 0;
+      padding: 16px;
+      background: #242424;
+      border: 1px solid #333;
+      border-radius: 6px;
     }
 
     .setting-group:last-child {
@@ -58,7 +149,7 @@
     .setting-label {
       display: block;
       margin-bottom: 6px;
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 500;
       color: #ccc;
     }
@@ -70,7 +161,7 @@
       border: 1px solid #444;
       border-radius: 4px;
       color: #e0e0e0;
-      font-size: 14px;
+      font-size: 13px;
       font-family: 'Consolas', 'Monaco', monospace;
       box-sizing: border-box;
     }
@@ -78,11 +169,13 @@
     .setting-textarea {
       min-height: 80px;
       resize: vertical;
+      font-family: 'Consolas', 'Monaco', monospace;
     }
 
     .setting-checkbox {
       margin-right: 8px;
       vertical-align: middle;
+      cursor: pointer;
     }
 
     .setting-input:focus {
@@ -97,7 +190,7 @@
       border: 1px solid #444;
       border-radius: 4px;
       color: #e0e0e0;
-      font-size: 14px;
+      font-size: 13px;
       box-sizing: border-box;
     }
 
@@ -108,8 +201,8 @@
 
     .setting-help {
       margin-top: 6px;
-      font-size: 13px;
-      color: #888;
+      font-size: 12px;
+      color: #999;
       line-height: 1.4;
     }
 
@@ -119,6 +212,7 @@
       border-radius: 3px;
       font-family: 'Consolas', 'Monaco', monospace;
       color: #4a9eff;
+      font-size: 11px;
     }
 
     .setting-preview {
@@ -127,12 +221,24 @@
       background: #1a1a1a;
       border: 1px solid #444;
       border-radius: 4px;
-      font-size: 13px;
+      font-size: 12px;
       color: #aaa;
+      word-break: break-all;
     }
 
     .setting-preview strong {
       color: #4a9eff;
+    }
+
+    .settings-footer {
+      padding: 16px 24px;
+      border-top: 1px solid #333;
+      background: #242424;
+      display: flex;
+      gap: 12px;
+      justify-content: space-between;
+      align-items: center;
+      flex-shrink: 0;
     }
 
     .save-button {
@@ -141,7 +247,7 @@
       color: #fff;
       border: none;
       border-radius: 4px;
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 500;
       cursor: pointer;
       transition: background 0.2s;
@@ -158,37 +264,39 @@
     }
 
     .status-message {
-      margin-top: 15px;
-      padding: 10px 12px;
-      border-radius: 4px;
-      font-size: 14px;
+      font-size: 13px;
       display: none;
+      flex: 1;
     }
 
     .status-message.success {
       display: block;
-      background: #1a3a1a;
       color: #6fc46f;
-      border: 1px solid #2d5a2d;
     }
 
     .status-message.error {
       display: block;
-      background: #3a1a1a;
       color: #f46f6f;
-      border: 1px solid #5a2d2d;
     }
 
     .back-link {
-      display: inline-block;
-      margin-top: 20px;
       color: #4a9eff;
       text-decoration: none;
-      font-size: 14px;
+      font-size: 13px;
     }
 
     .back-link:hover {
       text-decoration: underline;
+    }
+
+    @media (max-width: 768px) {
+      .settings-sidebar {
+        width: 150px;
+      }
+
+      .settings-content-wrapper {
+        padding: 16px;
+      }
     }
   </style>
 </head>
@@ -199,101 +307,120 @@
     <p>Customize how browser tabs are sent to LaterList</p>
   </div>
 
-  <div class="setting-section">
-    <h2>Send All Tabs Feature</h2>
-
-    <div class="setting-group">
-      <label class="setting-label" for="destination-tab">Destination Tab</label>
-      <select id="destination-tab" class="setting-select">
-        <option value="">Loading...</option>
-      </select>
-      <div class="setting-help">
-        Select which tab in your LaterList view should receive browser tabs when using "Send All Tabs"
+  <div class="settings-container">
+    <div class="settings-sidebar">
+      <div class="settings-tabs">
+        <button class="settings-tab active" data-tab="send-all-tabs">Send All Tabs</button>
+        <button class="settings-tab" data-tab="url-cleanup">URL Cleanup</button>
       </div>
     </div>
 
-    <div class="setting-group">
-      <label class="setting-label" for="container-format">Container Name Format</label>
-      <input type="text" id="container-format" class="setting-input" placeholder="ddd, MMM DD, YYYY at HHmm Hrs">
-      <div class="setting-help">
-        Customize how container names are formatted when created. Available tokens:
-        <code>YYYY</code> (year),
-        <code>MMM</code> (month),
-        <code>DD</code> (day),
-        <code>ddd</code> (weekday),
-        <code>HHmm</code> (time)
-      </div>
-      <div class="setting-preview" id="format-preview">
-        Preview: <strong>Loading...</strong>
-      </div>
-    </div>
-  </div>
+    <div class="settings-content">
+      <!-- Send All Tabs Tab -->
+      <div class="settings-content-wrapper active" data-tab-content="send-all-tabs">
+        <div class="settings-content-header">
+          <h2>Send All Tabs Feature</h2>
+          <p>Configure how tabs are sent to your LaterList</p>
+        </div>
 
-  <div class="setting-section">
-    <h2>URL Cleanup & Duplicate Detection</h2>
+        <div class="setting-group">
+          <label class="setting-label" for="destination-tab">Destination Tab</label>
+          <select id="destination-tab" class="setting-select">
+            <option value="">Loading...</option>
+          </select>
+          <div class="setting-help">
+            Select which tab in your LaterList view should receive browser tabs when using "Send All Tabs"
+          </div>
+        </div>
 
-    <div class="setting-group">
-      <label class="setting-label">
-        <input type="checkbox" id="url-cleanup-enabled" class="setting-checkbox">
-        Enable cleanup when matching URLs
-      </label>
-      <div class="setting-help">
-        Used for duplicate detection, sorting, and the saved-page badge.
+        <div class="setting-group">
+          <label class="setting-label" for="container-format">Container Name Format</label>
+          <input type="text" id="container-format" class="setting-input" placeholder="ddd, MMM DD, YYYY at HHmm Hrs">
+          <div class="setting-help">
+            Customize how container names are formatted when created. Available tokens:
+            <code>YYYY</code>, <code>MMM</code>, <code>DD</code>, <code>ddd</code>, <code>HHmm</code>
+          </div>
+          <div class="setting-preview" id="format-preview">
+            Preview: <strong>Loading...</strong>
+          </div>
+        </div>
       </div>
-    </div>
 
-    <div class="setting-group">
-      <label class="setting-label">
-        <input type="checkbox" id="strip-tracking-params" class="setting-checkbox">
-        Strip common tracking parameters
-      </label>
-      <div class="setting-help">
-        Removes parameters like <code>utm_*</code>, <code>fbclid</code>, <code>gclid</code>, <code>icid</code>,
-        <code>mc_eid</code>, <code>ref</code>, <code>ref_src</code>, and <code>igshid</code>.
-      </div>
-    </div>
+      <!-- URL Cleanup Tab -->
+      <div class="settings-content-wrapper" data-tab-content="url-cleanup">
+        <div class="settings-content-header">
+          <h2>URL Cleanup & Duplicate Detection</h2>
+          <p>Control how URLs are normalized for matching and deduplication</p>
+        </div>
 
-    <div class="setting-group">
-      <label class="setting-label" for="tracking-param-names">Parameter names to remove</label>
-      <textarea id="tracking-param-names" class="setting-input setting-textarea" placeholder="ref
+        <div class="setting-group">
+          <label class="setting-label">
+            <input type="checkbox" id="url-cleanup-enabled" class="setting-checkbox">
+            Enable cleanup when matching URLs
+          </label>
+          <div class="setting-help">
+            Used for duplicate detection, sorting, and the saved-page badge.
+          </div>
+        </div>
+
+        <div class="setting-group">
+          <label class="setting-label">
+            <input type="checkbox" id="strip-tracking-params" class="setting-checkbox">
+            Strip common tracking parameters
+          </label>
+          <div class="setting-help">
+            Removes <code>utm_*</code>, <code>fbclid</code>, <code>gclid</code>, <code>icid</code>, <code>mc_eid</code>,
+            <code>ref</code>, <code>ref_src</code>, <code>igshid</code>
+          </div>
+        </div>
+
+        <div class="setting-group">
+          <label class="setting-label" for="tracking-param-names">Parameter names to remove</label>
+          <textarea id="tracking-param-names" class="setting-input setting-textarea" placeholder="ref
 igshid"></textarea>
-      <div class="setting-help">One per line. Exact query parameter names that should be removed.</div>
-    </div>
+          <div class="setting-help">One per line. Exact query parameter names that should be removed.</div>
+        </div>
 
-    <div class="setting-group">
-      <label class="setting-label" for="tracking-param-prefixes">Parameter prefixes to remove</label>
-      <textarea id="tracking-param-prefixes" class="setting-input setting-textarea" placeholder="utm_
+        <div class="setting-group">
+          <label class="setting-label" for="tracking-param-prefixes">Parameter prefixes to remove</label>
+          <textarea id="tracking-param-prefixes" class="setting-input setting-textarea" placeholder="utm_
 icid"></textarea>
-      <div class="setting-help">One per line. Any parameter starting with these prefixes will be removed.</div>
-    </div>
+          <div class="setting-help">One per line. Any parameter starting with these prefixes will be removed.</div>
+        </div>
 
-    <div class="setting-group">
-      <label class="setting-label" for="path-rewrite-rules">Path rewrite rules</label>
-      <textarea id="path-rewrite-rules" class="setting-input setting-textarea"
-        placeholder="^/models/([^/]+)(?:/.*)?$ => /models/$1"></textarea>
-      <div class="setting-help">One rule per line. Format: <code>regex => replacement</code>. Useful for trimming long
-        paths.</div>
-    </div>
+        <div class="setting-group">
+          <label class="setting-label" for="path-rewrite-rules">Path rewrite rules</label>
+          <textarea id="path-rewrite-rules" class="setting-input setting-textarea"
+            placeholder="^/models/([^/]+)(?:/.*)?$ => /models/$1"></textarea>
+          <div class="setting-help">One rule per line. Format: <code>regex => replacement</code>. Useful for trimming
+            long paths.</div>
+        </div>
 
-    <div class="setting-group">
-      <label class="setting-label" for="hash-ignore-patterns">Hash fragments to ignore</label>
-      <textarea id="hash-ignore-patterns" class="setting-input setting-textarea" placeholder="^slot=\d+$"></textarea>
-      <div class="setting-help">One regex per line. If a fragment matches, it will be dropped for matching.</div>
-    </div>
+        <div class="setting-group">
+          <label class="setting-label" for="hash-ignore-patterns">Hash fragments to ignore</label>
+          <textarea id="hash-ignore-patterns" class="setting-input setting-textarea"
+            placeholder="^slot=\d+$"></textarea>
+          <div class="setting-help">One regex per line. If a fragment matches, it will be dropped for matching.</div>
+        </div>
 
-    <div class="setting-group">
-      <label class="setting-label" for="normalization-input">Normalization tester</label>
-      <input type="text" id="normalization-input" class="setting-input"
-        placeholder="https://example.com/page?utm_source=newsletter#slot=42">
-      <div class="setting-preview" id="normalization-output">Enter a URL to preview cleanup.</div>
-      <div class="setting-help">Preview uses the current rules above.</div>
+        <div class="setting-group">
+          <label class="setting-label" for="normalization-input">Normalization tester</label>
+          <input type="text" id="normalization-input" class="setting-input"
+            placeholder="https://example.com/page?utm_source=newsletter#slot=42">
+          <div class="setting-preview" id="normalization-output">Enter a URL to preview cleanup.</div>
+          <div class="setting-help">Preview uses the current rules above.</div>
+        </div>
+      </div>
     </div>
   </div>
 
-  <button class="save-button" id="save-settings">Save Settings</button>
-  <div class="status-message" id="status-message"></div>
-
-  <a href="view.html" class="back-link">← Back to LaterList</a>
+  <div class="settings-footer">
+    <div class="status-message" id="status-message"></div>
+    <div style="display: flex; gap: 12px; align-items: center;">
+      <button class="save-button" id="save-settings">Save Settings</button>
+      <a href="view.html" class="back-link">← Back</a>
+    </div>
+  </div>
 
   <script src="settings.js"></script>
 </body>

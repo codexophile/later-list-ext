@@ -351,6 +351,31 @@ async function handleSave() {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
+  // Set up tab switching
+  const tabButtons = document.querySelectorAll('.settings-tab');
+  tabButtons.forEach(button => {
+    button.addEventListener('click', () => {
+      const tabName = button.getAttribute('data-tab');
+
+      // Remove active class from all tabs and content
+      tabButtons.forEach(btn => btn.classList.remove('active'));
+      document
+        .querySelectorAll('.settings-content-wrapper')
+        .forEach(content => {
+          content.classList.remove('active');
+        });
+
+      // Add active class to clicked tab and corresponding content
+      button.classList.add('active');
+      const activeContent = document.querySelector(
+        `.settings-content-wrapper[data-tab-content="${tabName}"]`
+      );
+      if (activeContent) {
+        activeContent.classList.add('active');
+      }
+    });
+  });
+
   await loadAndPopulateSettings();
 
   const formatInput = document.getElementById('container-format');

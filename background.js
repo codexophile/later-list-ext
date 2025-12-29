@@ -500,6 +500,22 @@ async function addLink({
     imageUrls: normalizedImages,
   };
 
+  // Include optional metadata if present
+  const extra = [
+    'imageUrl',
+    'imageUrls',
+    'publishedAt',
+    'description',
+    'summary',
+    'keywords',
+  ];
+  try {
+    extra.forEach(key => {
+      const val = arguments[0]?.[key];
+      if (val !== undefined) newLink[key] = val;
+    });
+  } catch {}
+
   if (publishedAt) newLink.publishedAt = publishedAt;
   if (description) newLink.description = description;
   if (summary) newLink.summary = summary;

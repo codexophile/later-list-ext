@@ -6,6 +6,16 @@ let currentPage = {
   tabId: null,
 };
 
+// Preview state for the current page
+let previewData = {
+  imageUrl: null,
+  imageUrls: [],
+  publishedAt: null,
+  description: null,
+  summary: null,
+  keywords: null,
+};
+
 function setStatus(text) {
   const el = document.getElementById('status');
   if (!el) return;
@@ -39,6 +49,179 @@ function populateSelect(selectEl, options, selectedId) {
     if (opt.id === selectedId) option.selected = true;
     selectEl.appendChild(option);
   });
+}
+
+// Extract lightweight preview info from the active tab
+async function extractPreview(tabId) {
+  if (typeof tabId !== 'number') return;
+  try {
+    const imgResults = await chrome.scripting.executeScript({
+      target: { tabId },
+      function: () => {
+        const isSvg = url => {
+          const u = (url || '').trim().toLowerCase();
+          return u.endsWith('.svg') || u.startsWith('data:image/svg');
+        };
+        const candidates = [];
+        const seen = new Set();
+        const add = url => {
+          if (!url) return;
+          const trimmed = url.trim();
+          if (!trimmed || seen.has(trimmed)) return;
+          if (
+            trimmed.startsWith('data:') ||
+            trimmed.startsWith('about:') ||
+            trimmed.startsWith('javascript:')
+          )
+            return;
+          if (isSvg(trimmed)) return;
+          seen.add(trimmed);
+          candidates.push(trimmed);
+        };
+        const visibleEnough = img => {
+          if (
+            !img.complete ||
+            img.naturalWidth === 0 ||
+            img.naturalHeight === 0
+          )
+            return false;
+          const w = img.naturalWidth || img.width || 0;
+          const h = img.naturalHeight || img.height || 0;
+          if (w < 96 || h < 96) return false;
+          const ratio = w / h;
+          return ratio > 0.3 && ratio < 3.5 && img.offsetParent !== null;
+        };
+        document.querySelectorAll('img').forEach(img => {
+          if (!visibleEnough(img)) return;
+          const src = img.currentSrc || img.src || img.getAttribute('data-src');
+          add(src);
+        });
+        [
+          'meta[property="og:image"]',
+          'meta[name="twitter:image"]',
+          'meta[name="twitter:image:src"]',
+        ].forEach(sel => {
+          const el = document.querySelector(sel);
+          if (el?.content && !isSvg(el.content)) add(el.content);
+        });
+        const icon = document.querySelector('link[rel*="icon"]');
+        if (icon?.href && !isSvg(icon.href)) add(icon.href);
+        return candidates;
+      },
+    });
+    const imageUrls = imgResults?.[0]?.result || [];
+
+    const metaResults = await chrome.scripting.executeScript({
+      target: { tabId },
+      function: () => {
+        const extractJsonLd = () => {
+          const scripts = document.querySelectorAll(
+            'script[type="application/ld+json"]'
+          );
+          for (const script of scripts) {
+            try {
+              const data = JSON.parse(script.textContent);
+              if (data) return Array.isArray(data) ? data[0] : data;
+            } catch {}
+          }
+          return null;
+        };
+        const jsonLd = extractJsonLd();
+        const description =
+          jsonLd?.description ||
+          document.querySelector('meta[name="description"]')?.content ||
+          document.querySelector('meta[property="og:description"]')?.content ||
+          null;
+        const publishedCandidates = [
+          document.querySelector('meta[property="article:published_time"]')
+            ?.content,
+          document.querySelector('meta[name="publish_date"]')?.content,
+          document.querySelector('meta[name="date"]')?.content,
+          document.querySelector('meta[property="og:published_time"]')?.content,
+          jsonLd?.datePublished,
+        ].filter(Boolean);
+        let publishedAt = null;
+        for (const v of publishedCandidates) {
+          const ts = new Date(v).getTime();
+          if (!isNaN(ts)) {
+            publishedAt = ts;
+            break;
+          }
+        }
+        const keywords =
+          jsonLd?.keywords ||
+          document.querySelector('meta[name="keywords"]')?.content ||
+          null;
+        return { description, publishedAt, keywords };
+      },
+    });
+    const meta = metaResults?.[0]?.result || {};
+
+    previewData = {
+      imageUrl: imageUrls[0] || null,
+      imageUrls,
+      description: meta?.description || null,
+      summary: null,
+      publishedAt: meta?.publishedAt || null,
+      keywords: meta?.keywords || null,
+    };
+    renderPreview();
+  } catch {}
+}
+
+function renderPreview() {
+  const thumb = document.getElementById('preview-thumb');
+  const titleEl = document.getElementById('preview-title');
+  const domainEl = document.getElementById('preview-domain');
+  const descEl = document.getElementById('preview-description');
+  const imagesEl = document.getElementById('preview-images');
+  const dateEl = document.getElementById('preview-date');
+  const keywordsEl = document.getElementById('preview-keywords');
+
+  if (thumb) {
+    thumb.classList.remove('skeleton');
+    if (previewData.imageUrl) {
+      thumb.style.backgroundImage = `url(${previewData.imageUrl})`;
+    } else {
+      thumb.style.backgroundImage = '';
+    }
+  }
+  if (titleEl) {
+    titleEl.classList.remove('skeleton');
+    titleEl.textContent = currentPage.title || 'Untitled';
+  }
+  if (domainEl) {
+    domainEl.classList.remove('skeleton');
+    try {
+      domainEl.textContent = new URL(currentPage.url).hostname;
+    } catch {
+      domainEl.textContent = '';
+    }
+  }
+  if (descEl) {
+    descEl.classList.remove('skeleton');
+    descEl.textContent = previewData.description || '';
+  }
+  if (imagesEl) {
+    imagesEl.replaceChildren();
+    (previewData.imageUrls || []).slice(0, 8).forEach(u => {
+      const img = document.createElement('img');
+      img.src = u;
+      imagesEl.appendChild(img);
+    });
+  }
+  if (dateEl) {
+    if (previewData.publishedAt) {
+      dateEl.textContent = new Date(
+        previewData.publishedAt
+      ).toLocaleDateString();
+    } else {
+      dateEl.textContent = '';
+    }
+  }
+  if (keywordsEl) {
+    keywordsEl.textContent = previewData.keywords || '';
+  }
 }
 
 async function loadCurrentTab() {
@@ -606,7 +789,25 @@ document.addEventListener('DOMContentLoaded', async () => {
   try {
     await loadCurrentTab();
     await loadDataAndPopulatePickers();
+    if (typeof currentPage.tabId === 'number') {
+      extractPreview(currentPage.tabId);
+    }
   } catch {
     setStatus('Failed to load');
   }
+
+  // Toggle preview details visibility
+  document.getElementById('toggle-preview')?.addEventListener('click', () => {
+    const details = document.getElementById('preview-details');
+    const btn = document.getElementById('toggle-preview');
+    if (!details || !btn) return;
+    const hidden = details.hasAttribute('hidden');
+    if (hidden) {
+      details.removeAttribute('hidden');
+      btn.textContent = 'Hide details';
+    } else {
+      details.setAttribute('hidden', '');
+      btn.textContent = 'Show details';
+    }
+  });
 });

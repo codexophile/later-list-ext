@@ -27,6 +27,31 @@
       <div class="laterlist-popup__url" id="page-url"></div>
     </section>
 
+    <section class="panel preview-panel" aria-label="Link preview">
+      <div class="panel-head">
+        <div>
+          <div class="eyebrow">Preview</div>
+          <div class="panel-title">Quick look</div>
+        </div>
+        <button class="laterlist-popup__chip" id="toggle-preview" title="Show more details">Show details</button>
+      </div>
+      <div id="preview-compact" class="preview-compact" aria-live="polite">
+        <div class="preview-thumb skeleton" id="preview-thumb"></div>
+        <div class="preview-meta">
+          <div class="preview-title skeleton" id="preview-title">Loading...</div>
+          <div class="preview-domain skeleton" id="preview-domain"></div>
+          <div class="preview-description skeleton" id="preview-description"></div>
+        </div>
+      </div>
+      <div id="preview-details" class="preview-details" hidden>
+        <div class="image-list" id="preview-images"></div>
+        <div class="meta-grid">
+          <div class="meta-chip" id="preview-date"></div>
+          <div class="meta-chip" id="preview-keywords"></div>
+        </div>
+      </div>
+    </section>
+
     <section class="panel">
       <div class="panel-head">
         <div>

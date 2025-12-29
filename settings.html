@@ -17,18 +17,22 @@
       background: #1a1a1a;
       color: #e0e0e0;
       height: 100%;
-      width: 100%;
+      width: 100% !important;
+      min-width: 100% !important;
+      max-width: 100% !important;
     }
 
     body {
       display: flex;
       flex-direction: column;
+      width: 100% !important;
     }
 
     .settings-container {
       display: flex;
       flex: 1;
       height: 100%;
+      width: 100%;
       overflow: hidden;
     }
 
@@ -283,6 +287,8 @@
       color: #4a9eff;
       text-decoration: none;
       font-size: 13px;
+      white-space: nowrap;
+      flex-shrink: 0;
     }
 
     .back-link:hover {
@@ -418,7 +424,7 @@ icid"></textarea>
     <div class="status-message" id="status-message"></div>
     <div style="display: flex; gap: 12px; align-items: center;">
       <button class="save-button" id="save-settings">Save Settings</button>
-      <a href="view.html" class="back-link">← Back</a>
+      <a href="view.html" class="back-link">Back</a>
     </div>
   </div>
 

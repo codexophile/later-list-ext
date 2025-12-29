@@ -16,6 +16,9 @@ let previewData = {
   keywords: null,
 };
 
+// Track which images are selected for saving
+let selectedImageUrls = [];
+
 function setStatus(text) {
   const el = document.getElementById('status');
   if (!el) return;
@@ -165,6 +168,8 @@ async function extractPreview(tabId) {
       publishedAt: meta?.publishedAt || null,
       keywords: meta?.keywords || null,
     };
+    // Reset selected images when preview is refreshed
+    selectedImageUrls = imageUrls.length > 0 ? [imageUrls[0]] : [];
     renderPreview();
   } catch {}
 }
@@ -204,11 +209,41 @@ function renderPreview() {
   }
   if (imagesEl) {
     imagesEl.replaceChildren();
-    (previewData.imageUrls || []).slice(0, 8).forEach(u => {
+    (previewData.imageUrls || []).slice(0, 8).forEach((u, idx) => {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'image-item';
+
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.className = 'image-checkbox';
+      checkbox.value = u;
+      checkbox.id = `image-${idx}`;
+      checkbox.checked = selectedImageUrls.includes(u);
+      checkbox.addEventListener('change', e => {
+        if (e.target.checked) {
+          if (!selectedImageUrls.includes(u)) selectedImageUrls.push(u);
+        } else {
+          selectedImageUrls = selectedImageUrls.filter(x => x !== u);
+        }
+      });
+
       const img = document.createElement('img');
       img.src = u;
-      imagesEl.appendChild(img);
+
+      wrapper.appendChild(checkbox);
+      wrapper.appendChild(img);
+      imagesEl.appendChild(wrapper);
     });
+
+    // Auto-select first image if none selected
+    if (
+      selectedImageUrls.length === 0 &&
+      (previewData.imageUrls || []).length > 0
+    ) {
+      selectedImageUrls.push(previewData.imageUrls[0]);
+      const firstCheckbox = imagesEl.querySelector('.image-checkbox');
+      if (firstCheckbox) firstCheckbox.checked = true;
+    }
   }
   if (dateEl) {
     if (previewData.publishedAt) {
@@ -610,6 +645,11 @@ async function saveToSelection({ closeTabAfterSave }) {
       }
     }
 
+    // Use selected images instead of all extracted images
+    const finalImageUrls =
+      selectedImageUrls.length > 0 ? selectedImageUrls : imageUrls;
+    const finalImageUrl = finalImageUrls.length > 0 ? finalImageUrls[0] : null;
+
     const result = await chrome.runtime.sendMessage({
       type: 'laterlist:addLink',
       payload: {
@@ -617,8 +657,8 @@ async function saveToSelection({ closeTabAfterSave }) {
         title: currentPage.title,
         tabId,
         containerId,
-        imageUrl,
-        imageUrls,
+        imageUrl: finalImageUrl,
+        imageUrls: finalImageUrls,
         publishedAt,
         description,
         summary,

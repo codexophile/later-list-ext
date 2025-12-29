@@ -200,6 +200,62 @@ body.popup-body {
   flex-wrap: wrap;
 }
 
+.image-item {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.image-item img {
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--stroke);
+  display: block;
+}
+
+.image-checkbox {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+  appearance: none;
+  -webkit-appearance: none;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1.5px solid rgba(255, 255, 255, 0.7);
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+
+.image-checkbox:checked {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+
+.image-checkbox:checked::after {
+  content: '';
+  position: absolute;
+  width: 4px;
+  height: 7px;
+  border: solid white;
+  border-width: 0 1.5px 1.5px 0;
+  transform: rotate(45deg);
+}
+
+.image-item:hover img {
+  opacity: 0.8;
+}
+
 .image-list > img {
   width: 56px;
   height: 56px;

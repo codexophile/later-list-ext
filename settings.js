@@ -14,15 +14,19 @@ const DEFAULT_URL_CLEANUP = {
   lowercase: true,
 };
 
+const DEFAULT_IMAGE_RULES = [];
+
 const DEFAULT_SETTINGS = {
   containerNameFormat: 'ddd, MMM DD, YYYY at HHmm Hrs',
   sendAllTabsDestination: '', // Empty means first tab
   urlCleanup: DEFAULT_URL_CLEANUP,
+  imageRules: DEFAULT_IMAGE_RULES,
 };
 
 function mergeSettings(raw = {}) {
   const merged = { ...DEFAULT_SETTINGS, ...raw };
   merged.urlCleanup = { ...DEFAULT_URL_CLEANUP, ...(raw.urlCleanup || {}) };
+  merged.imageRules = Array.isArray(raw.imageRules) ? raw.imageRules : [];
   return merged;
 }
 
@@ -135,6 +139,82 @@ function formatPathRewriteRules(rules) {
 
 function formatList(list) {
   return (list || []).join('\n');
+}
+
+function createRuleRow(rule = {}, index = 0) {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'setting-group image-rule';
+  wrapper.dataset.index = index;
+
+  wrapper.innerHTML = `
+    <label class="setting-label">URL pattern (wildcards allowed)</label>
+    <input type="text" class="setting-input rule-pattern" placeholder="https://example.com/*" value="${
+      rule.pattern || ''
+    }" />
+    <div class="setting-help">Use * and ? wildcards. First matching rule is applied.</div>
+
+    <label class="setting-label">Allow selectors (one per line)</label>
+    <textarea class="setting-input setting-textarea rule-allow" placeholder=".article img\nmain img">${formatList(
+      rule.allow || []
+    )}</textarea>
+    <div class="setting-help">If provided, only elements matching at least one of these selectors are kept.</div>
+
+    <label class="setting-label">Deny selectors (one per line)</label>
+    <textarea class="setting-input setting-textarea rule-deny" placeholder="header img\nnav img\nmeta[property='og:image']">${formatList(
+      rule.deny || []
+    )}</textarea>
+    <div class="setting-help">Any element matching these selectors is skipped. Deny overrides allow.</div>
+
+    <button type="button" class="rule-remove">Remove rule</button>
+  `;
+
+  const removeBtn = wrapper.querySelector('.rule-remove');
+  removeBtn.addEventListener('click', () => {
+    wrapper.remove();
+    updateRuleIndices();
+  });
+
+  return wrapper;
+}
+
+function updateRuleIndices() {
+  document.querySelectorAll('.image-rule').forEach((el, idx) => {
+    el.dataset.index = idx;
+  });
+}
+
+function parseSelectors(value) {
+  return value
+    .split('\n')
+    .map(v => v.trim())
+    .filter(Boolean);
+}
+
+function collectImageRules() {
+  const rules = [];
+  document.querySelectorAll('.image-rule').forEach(el => {
+    const pattern = el.querySelector('.rule-pattern')?.value.trim();
+    const allow = parseSelectors(el.querySelector('.rule-allow')?.value || '');
+    const deny = parseSelectors(el.querySelector('.rule-deny')?.value || '');
+    if (!pattern) return;
+    rules.push({ pattern, allow, deny });
+  });
+  return rules;
+}
+
+function populateImageRules(settings) {
+  const list = document.getElementById('image-rules-list');
+  if (!list) return;
+  list.innerHTML = '';
+  const rules = settings.imageRules || [];
+  if (!rules.length) {
+    list.appendChild(createRuleRow({ pattern: '*', allow: [], deny: [] }, 0));
+  } else {
+    rules.forEach((rule, idx) => {
+      list.appendChild(createRuleRow(rule, idx));
+    });
+  }
+  updateRuleIndices();
 }
 
 function normalizeUrlWithSettings(url, cleanup) {
@@ -320,6 +400,7 @@ async function loadAndPopulateSettings() {
   }
 
   populateUrlCleanupFields(settings);
+  populateImageRules(settings);
   await populateDestinationTabs(settings);
   updatePreview();
   updateNormalizationTest();
@@ -337,6 +418,7 @@ async function handleSave() {
       formatInput.value.trim() || DEFAULT_SETTINGS.containerNameFormat,
     sendAllTabsDestination: destinationSelect.value,
     urlCleanup: getUrlCleanupFromInputs(),
+    imageRules: collectImageRules(),
   };
 
   try {
@@ -353,8 +435,10 @@ async function handleSave() {
 document.addEventListener('DOMContentLoaded', async () => {
   // Set up tab switching
   const tabButtons = document.querySelectorAll('.settings-tab');
+
   tabButtons.forEach(button => {
-    button.addEventListener('click', () => {
+    button.addEventListener('click', e => {
+      e.preventDefault();
       const tabName = button.getAttribute('data-tab');
 
       // Remove active class from all tabs and content
@@ -386,6 +470,19 @@ document.addEventListener('DOMContentLoaded', async () => {
   const saveButton = document.getElementById('save-settings');
   if (saveButton) {
     saveButton.addEventListener('click', handleSave);
+  }
+
+  const addRuleBtn = document.getElementById('add-image-rule');
+  if (addRuleBtn) {
+    addRuleBtn.addEventListener('click', () => {
+      const list = document.getElementById('image-rules-list');
+      if (!list) return;
+      const nextIdx = list.querySelectorAll('.image-rule').length;
+      list.appendChild(
+        createRuleRow({ pattern: '*', allow: [], deny: [] }, nextIdx)
+      );
+      updateRuleIndices();
+    });
   }
 
   const normalizationIds = [

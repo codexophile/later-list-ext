@@ -14,16 +14,49 @@ const DEFAULT_URL_CLEANUP = {
   lowercase: true,
 };
 
+const DEFAULT_IMAGE_RULES = [];
+
 const DEFAULT_SETTINGS = {
   containerNameFormat: 'ddd, MMM DD, YYYY at HHmm Hrs',
   sendAllTabsDestination: '', // Empty means first tab
   urlCleanup: DEFAULT_URL_CLEANUP,
+  imageRules: DEFAULT_IMAGE_RULES,
 };
 
 function mergeSettings(raw = {}) {
   const merged = { ...DEFAULT_SETTINGS, ...raw };
   merged.urlCleanup = { ...DEFAULT_URL_CLEANUP, ...(raw.urlCleanup || {}) };
+  merged.imageRules = Array.isArray(raw.imageRules) ? raw.imageRules : [];
   return merged;
+}
+
+function wildcardToRegex(pattern) {
+  const escaped = pattern.replace(/[.+^${}()|\[\]\\]/g, '\\$&');
+  const regex = '^' + escaped.replace(/\*/g, '.*').replace(/\?/g, '.') + '$';
+  return new RegExp(regex, 'i');
+}
+
+function getActiveImageRule(settings, url) {
+  const rules = settings?.imageRules || [];
+  for (const rule of rules) {
+    if (!rule?.pattern) continue;
+    try {
+      const re = wildcardToRegex(rule.pattern.trim());
+      if (re.test(url || '')) {
+        return {
+          allow: Array.isArray(rule.allow) ? rule.allow : [],
+          deny: Array.isArray(rule.deny) ? rule.deny : [],
+        };
+      }
+    } catch (err) {
+      console.warn(
+        '[LaterList] Invalid image rule pattern:',
+        rule.pattern,
+        err
+      );
+    }
+  }
+  return { allow: [], deny: [] };
 }
 
 const DEFAULT_DATA = {
@@ -173,10 +206,11 @@ async function sendAllBrowserTabsToLaterList() {
         // Extract images and metadata if possible
         if (typeof tab.id === 'number') {
           try {
+            const rule = getActiveImageRule(settings, tab.url);
             // Use fetch-based extraction for discarded tabs
             const extracted = tab.discarded
-              ? await extractFromUrl(tab.url)
-              : await extractFromTab(tab.id);
+              ? await extractFromUrl(tab.url, rule)
+              : await extractFromTab(tab.id, tab.url, rule);
             if (extracted.imageUrls?.length > 0) {
               link.imageUrls = extracted.imageUrls;
               link.imageUrl = extracted.imageUrl;
@@ -347,10 +381,11 @@ async function sendTabsAroundCurrentTab(direction) {
         // Extract images and metadata if possible
         if (typeof tab.id === 'number') {
           try {
+            const rule = getActiveImageRule(settings, tab.url);
             // Use fetch-based extraction for discarded tabs
             const extracted = tab.discarded
-              ? await extractFromUrl(tab.url)
-              : await extractFromTab(tab.id);
+              ? await extractFromUrl(tab.url, rule)
+              : await extractFromTab(tab.id, tab.url, rule);
             if (extracted.imageUrls?.length > 0) {
               link.imageUrls = extracted.imageUrls;
               link.imageUrl = extracted.imageUrl;
@@ -751,7 +786,7 @@ async function refreshMissingImages({ limit = 50 } = {}) {
   };
 }
 
-async function extractFromHtml(html, url) {
+async function extractFromHtml(html, url, rule = { allow: [], deny: [] }) {
   const result = {
     imageUrls: [],
     imageUrl: null,
@@ -764,6 +799,22 @@ async function extractFromHtml(html, url) {
   try {
     const parser = new DOMParser();
     const doc = parser.parseFromString(html, 'text/html');
+
+    const allowSelectors = Array.isArray(rule.allow) ? rule.allow : [];
+    const denySelectors = Array.isArray(rule.deny) ? rule.deny : [];
+
+    const matchesAny = (el, selectors) =>
+      selectors.some(sel => {
+        try {
+          return el.matches(sel);
+        } catch {
+          return false;
+        }
+      });
+
+    const isAllowed = el =>
+      !allowSelectors.length || matchesAny(el, allowSelectors);
+    const isDenied = el => matchesAny(el, denySelectors);
 
     const isSvg = url => {
       const u = url.trim().toLowerCase();
@@ -785,9 +836,9 @@ async function extractFromHtml(html, url) {
       }
     };
 
-    // Extract images from meta tags
     const seen = new Set();
     const metaUrls = [];
+    const imgUrls = [];
     const metaSelectors = [
       'meta[property="og:image"]',
       'meta[name="twitter:image"]',
@@ -797,6 +848,7 @@ async function extractFromHtml(html, url) {
     metaSelectors.forEach(sel => {
       const el = doc.querySelector(sel);
       if (el?.content) {
+        if (isDenied(el)) return;
         const val = el.content.trim();
         if (!seen.has(val) && !isSvg(val) && !isBlockedMeta(val)) {
           const abs = absolutizeUrl(val, url);
@@ -808,8 +860,33 @@ async function extractFromHtml(html, url) {
       }
     });
 
-    result.imageUrls = metaUrls;
-    result.imageUrl = metaUrls[0] || null;
+    // Visible images from HTML (best-effort without size checks)
+    doc.querySelectorAll('img').forEach(img => {
+      if (isDenied(img)) return;
+      if (!isAllowed(img)) return;
+      const src = img.getAttribute('src') || img.getAttribute('data-src');
+      if (!src) return;
+      const abs = absolutizeUrl(src, url);
+      if (!abs || seen.has(abs) || isSvg(abs)) return;
+      seen.add(abs);
+      imgUrls.push(abs);
+    });
+
+    let iconUrl = null;
+    const iconEl = doc.querySelector('link[rel*="icon"]');
+    if (iconEl && !isDenied(iconEl)) {
+      const href = iconEl.getAttribute('href');
+      const abs = absolutizeUrl(href, url);
+      if (abs && !isSvg(abs) && !isBlockedMeta(abs)) {
+        iconUrl = abs;
+      }
+    }
+
+    const combined = metaUrls.concat(imgUrls);
+    if (!combined.length && iconUrl) combined.push(iconUrl);
+
+    result.imageUrls = combined;
+    result.imageUrl = combined[0] || null;
 
     // Extract metadata
     const extractJsonLd = () => {
@@ -914,19 +991,19 @@ async function extractFromHtml(html, url) {
   return result;
 }
 
-async function extractFromUrl(url) {
+async function extractFromUrl(url, rule = { allow: [], deny: [] }) {
   try {
     const res = await fetch(url, { redirect: 'follow', credentials: 'omit' });
     if (!res.ok) return { imageUrls: [], imageUrl: null };
     const html = await res.text();
-    return await extractFromHtml(html, url);
+    return await extractFromHtml(html, url, rule);
   } catch (err) {
     console.warn('[LaterList] extractFromUrl failed for', url, err);
     return { imageUrls: [], imageUrl: null };
   }
 }
 
-async function extractFromTab(tabId) {
+async function extractFromTab(tabId, pageUrl, rule = { allow: [], deny: [] }) {
   const result = {
     imageUrls: [],
     imageUrl: null,
@@ -937,10 +1014,13 @@ async function extractFromTab(tabId) {
   };
 
   try {
+    const allowSelectors = Array.isArray(rule.allow) ? rule.allow : [];
+    const denySelectors = Array.isArray(rule.deny) ? rule.deny : [];
+
     // Extract images
     const imageResults = await chrome.scripting.executeScript({
       target: { tabId },
-      func: async () => {
+      func: async (allowSelectors, denySelectors) => {
         const testImageUrl = (url, timeout = 3000) => {
           return new Promise(resolve => {
             const img = new Image();
@@ -964,12 +1044,40 @@ async function extractFromTab(tabId) {
           });
         };
 
+        const matchesAny = (el, selectors) =>
+          selectors.some(sel => {
+            try {
+              return el.matches(sel);
+            } catch {
+              return false;
+            }
+          });
+
+        const isAllowed = el =>
+          !allowSelectors.length || matchesAny(el, allowSelectors);
+        const isDenied = el => matchesAny(el, denySelectors);
+
         const candidates = [];
         const seen = new Set();
 
         const isSvg = url => {
           const u = url.trim().toLowerCase();
           return u.endsWith('.svg') || u.startsWith('data:image/svg');
+        };
+
+        const isBlockedMeta = url => {
+          const lowered = url.trim().toLowerCase();
+          const pattern = /logo|icon|sprite|favicon|social|share/;
+          if (pattern.test(lowered)) return true;
+          try {
+            const parsed = new URL(url, location.href);
+            const path = parsed.pathname.toLowerCase();
+            if (path.includes('favicon')) return true;
+            const file = path.split('/').pop() || '';
+            return pattern.test(file);
+          } catch {
+            return false;
+          }
         };
 
         const add = url => {
@@ -1021,62 +1129,61 @@ async function extractFromTab(tabId) {
           return Boolean(img.closest(selectors.join(',')));
         };
 
-        document.querySelectorAll('img').forEach(img => {
-          if (!visibleEnough(img)) return;
-          if (isInExcludedContext(img)) return;
-          const src = img.currentSrc || img.src || img.getAttribute('data-src');
-          add(src);
-        });
-
+        // Meta tags first
         const metaSelectors = [
           'meta[property="og:image"]',
           'meta[name="twitter:image"]',
           'meta[name="twitter:image:src"]',
         ];
-        const isBlockedMeta = url => {
-          const lowered = url.trim().toLowerCase();
-          const pattern = /logo|icon|sprite|favicon|social|share/;
-          if (pattern.test(lowered)) return true;
-          try {
-            const parsed = new URL(url, location.href);
-            const path = parsed.pathname.toLowerCase();
-            if (path.includes('favicon')) return true;
-            const file = path.split('/').pop() || '';
-            return pattern.test(file);
-          } catch {
-            return false;
-          }
-        };
         const metaUrls = [];
         metaSelectors.forEach(sel => {
-          const el = document.querySelector(sel);
-          if (el?.content) {
-            const val = el.content.trim();
+          document.querySelectorAll(sel).forEach(el => {
+            if (isDenied(el)) return;
+            const val = el.content?.trim();
+            if (!val) return;
             if (!seen.has(val) && !isSvg(val) && !isBlockedMeta(val)) {
               metaUrls.push(val);
             }
-          }
+          });
         });
-
-        const icon = document.querySelector('link[rel*="icon"]');
-        if (icon?.href) {
-          const val = icon.href;
-          if (!seen.has(val) && !isSvg(val)) {
-            metaUrls.push(val);
-          }
-        }
 
         const validationPromises = metaUrls.map(async url => {
           const isValid = await testImageUrl(url);
           return isValid ? url : null;
         });
-
         const validatedMeta = (await Promise.all(validationPromises)).filter(
           Boolean
         );
+        validatedMeta.forEach(v => seen.add(v));
 
-        return [...validatedMeta, ...candidates];
+        // Visible images next
+        document.querySelectorAll('img').forEach(img => {
+          if (!visibleEnough(img)) return;
+          if (isInExcludedContext(img)) return;
+          if (isDenied(img)) return;
+          if (!isAllowed(img)) return;
+          const src = img.currentSrc || img.src || img.getAttribute('data-src');
+          add(src);
+        });
+
+        // Icon fallback only if nothing else
+        let iconUrl = null;
+        const icon = document.querySelector('link[rel*="icon"]');
+        if (icon?.href && !validatedMeta.length && !candidates.length) {
+          if (!isDenied(icon)) {
+            const val = icon.href;
+            if (!seen.has(val) && !isSvg(val) && !isBlockedMeta(val)) {
+              const ok = await testImageUrl(val);
+              if (ok) iconUrl = val;
+            }
+          }
+        }
+
+        const combined = [...validatedMeta, ...candidates];
+        if (!combined.length && iconUrl) combined.push(iconUrl);
+        return combined;
       },
+      args: [allowSelectors, denySelectors],
       world: 'MAIN',
     });
 
@@ -1268,10 +1375,12 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   let payload = { url, title };
   if (tab?.id && typeof tab.id === 'number') {
     try {
+      const settings = await getSettings();
+      const rule = getActiveImageRule(settings, url);
       // Use fetch-based extraction for discarded tabs
       const extracted = tab.discarded
-        ? await extractFromUrl(url)
-        : await extractFromTab(tab.id);
+        ? await extractFromUrl(url, rule)
+        : await extractFromTab(tab.id, url, rule);
       payload = { ...payload, ...extracted };
     } catch (err) {
       console.warn('[LaterList] Extraction failed for context menu save:', err);
@@ -1296,6 +1405,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     getData()
       .then(data => sendResponse({ data }))
       .catch(() => sendResponse({ data: DEFAULT_DATA }));
+    return true;
+  }
+  if (message?.type === 'laterlist:getSettings') {
+    getSettings()
+      .then(settings => sendResponse({ settings }))
+      .catch(() => sendResponse({ settings: mergeSettings() }));
     return true;
   }
   if (message?.type === 'laterlist:addLink') {

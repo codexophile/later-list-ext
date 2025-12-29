@@ -101,7 +101,7 @@
       flex: 1;
       display: flex;
       flex-direction: column;
-      overflow-y: auto;
+      overflow: hidden;
     }
 
     .settings-content-wrapper {
@@ -109,8 +109,9 @@
       display: none;
       flex-direction: column;
       gap: 20px;
-      height: 100%;
+      flex: 1;
       overflow-y: auto;
+      min-height: 0;
     }
 
     .settings-content-wrapper.active {
@@ -318,6 +319,7 @@
       <div class="settings-tabs">
         <button class="settings-tab active" data-tab="send-all-tabs">Send All Tabs</button>
         <button class="settings-tab" data-tab="url-cleanup">URL Cleanup</button>
+        <button class="settings-tab" data-tab="image-rules">Image Rules</button>
       </div>
     </div>
 
@@ -398,23 +400,45 @@ icid"></textarea>
           <label class="setting-label" for="path-rewrite-rules">Path rewrite rules</label>
           <textarea id="path-rewrite-rules" class="setting-input setting-textarea"
             placeholder="^/models/([^/]+)(?:/.*)?$ => /models/$1"></textarea>
-          <div class="setting-help">One rule per line. Format: <code>regex => replacement</code>. Useful for trimming
-            long paths.</div>
+          <div class="setting-help">One per line. Pattern => replacement. Uses RegExp; test carefully.</div>
         </div>
 
         <div class="setting-group">
-          <label class="setting-label" for="hash-ignore-patterns">Hash fragments to ignore</label>
+          <label class="setting-label" for="hash-ignore-patterns">Hash patterns to ignore</label>
           <textarea id="hash-ignore-patterns" class="setting-input setting-textarea"
             placeholder="^slot=\d+$"></textarea>
-          <div class="setting-help">One regex per line. If a fragment matches, it will be dropped for matching.</div>
+          <div class="setting-help">One per line. If matched, the URL hash is removed before comparison.</div>
         </div>
 
         <div class="setting-group">
-          <label class="setting-label" for="normalization-input">Normalization tester</label>
+          <label class="setting-label" for="normalization-input">Test URL cleanup</label>
           <input type="text" id="normalization-input" class="setting-input"
-            placeholder="https://example.com/page?utm_source=newsletter#slot=42">
+            placeholder="https://example.com?a=1&utm_source=test">
           <div class="setting-preview" id="normalization-output">Enter a URL to preview cleanup.</div>
-          <div class="setting-help">Preview uses the current rules above.</div>
+        </div>
+      </div>
+
+      <!-- Image Rules Tab -->
+      <div class="settings-content-wrapper" data-tab-content="image-rules">
+        <div class="settings-content-header">
+          <h2>Image Picking Rules</h2>
+          <p>Control which images are collected per site using URL patterns and CSS selectors</p>
+        </div>
+
+        <div class="setting-group">
+          <div class="setting-help">
+            Rules are checked in order; the first matching URL pattern is applied. Use * and ? wildcards.
+          </div>
+        </div>
+
+        <div id="image-rules-list" class="setting-group" style="display: flex; flex-direction: column; gap: 12px;">
+        </div>
+
+        <div class="setting-group">
+          <button type="button" id="add-image-rule" class="save-button" style="width: auto;">Add Rule</button>
+          <div class="setting-help">
+            For meta tags denial, include selectors like <code>meta[property="og:image"]</code> in the Deny list.
+          </div>
         </div>
       </div>
     </div>

@@ -237,7 +237,10 @@ function renderPreview() {
     });
 
     // Auto-select all images by default
-    if (selectedImageUrls.length === 0 && (previewData.imageUrls || []).length > 0) {
+    if (
+      selectedImageUrls.length === 0 &&
+      (previewData.imageUrls || []).length > 0
+    ) {
       selectedImageUrls = [...previewData.imageUrls];
       const checkboxes = imagesEl.querySelectorAll('.image-checkbox');
       checkboxes.forEach(cb => (cb.checked = true));
@@ -844,8 +847,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     chrome.tabs.create({ url: 'settings.html' });
   });
 
-  document.getElementById('select-all-images')?.addEventListener('click', selectAllImages);
-  document.getElementById('deselect-all-images')?.addEventListener('click', deselectAllImages);
+  document
+    .getElementById('select-all-images')
+    ?.addEventListener('click', selectAllImages);
+  document
+    .getElementById('deselect-all-images')
+    ?.addEventListener('click', deselectAllImages);
 
   try {
     await loadCurrentTab();

@@ -2710,15 +2710,28 @@ function renderOpenTabsList() {
   }
 
   list.replaceChildren();
-  state.openBrowserTabs.forEach(tab => {
+  state.openBrowserTabs.forEach((tab, index) => {
     const tabEl = createEl('div', {
       className: 'open-tab-item',
       draggable: true,
-      dataset: {
-        tabId: tab.id,
-        tabUrl: tab.url,
-      },
     });
+    
+    // Store the browser tab data directly on the element
+    tabEl._laterlistBrowserTab = tab;
+
+    // Favicon
+    const favicon = document.createElement('img');
+    favicon.className = 'open-tab-favicon';
+    favicon.src =
+      tab.favIconUrl ||
+      'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="%239198a1"><circle cx="8" cy="8" r="7" fill="none" stroke="%239198a1" stroke-width="1"/><circle cx="8" cy="8" r="3" fill="%239198a1"/></svg>';
+    favicon.alt = '';
+    favicon.onerror = () => {
+      favicon.src =
+        'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="%239198a1"><circle cx="8" cy="8" r="7" fill="none" stroke="%239198a1" stroke-width="1"/><circle cx="8" cy="8" r="3" fill="%239198a1"/></svg>';
+    };
+
+    const textContent = createEl('div', { className: 'open-tab-text-content' });
 
     const title = createEl('div', {
       className: 'open-tab-title',
@@ -2730,8 +2743,11 @@ function renderOpenTabsList() {
       textContent: tab.url || 'about:blank',
     });
 
-    tabEl.appendChild(title);
-    tabEl.appendChild(url);
+    textContent.appendChild(title);
+    textContent.appendChild(url);
+
+    tabEl.appendChild(favicon);
+    tabEl.appendChild(textContent);
 
     // Drag events for sidebar tabs
     tabEl.addEventListener('dragstart', onSidebarTabDragStart);
@@ -2746,11 +2762,25 @@ function renderOpenTabsList() {
 function onSidebarTabDragStart(evt) {
   const tabEl = evt.currentTarget;
   sidebarDrag.draggedElement = tabEl;
+
+  // Get the tab object stored directly on the element
+  const browserTab = tabEl._laterlistBrowserTab;
+
+  if (!browserTab) {
+    console.warn('[LaterList] Could not find tab data on element');
+    return;
+  }
+
   sidebarDrag.draggedTabData = {
-    tabId: parseInt(tabEl.dataset.tabId),
-    url: tabEl.dataset.tabUrl,
-    title: tabEl.querySelector('.open-tab-title')?.textContent || '',
+    tabId: browserTab.id,
+    url: browserTab.url,
+    title: browserTab.title || 'Untitled',
   };
+
+  console.log(
+    '[LaterList] Starting drag with tab data:',
+    sidebarDrag.draggedTabData
+  );
 
   evt.dataTransfer.effectAllowed = 'move';
   evt.dataTransfer.setData(
@@ -2872,15 +2902,28 @@ function handleTabDropOnContainer(containerEl, tabData) {
       savedAt: Date.now(),
     };
 
+    console.log('[LaterList] Dropping tab with data:', {
+      title: newLink.title,
+      url: newLink.url,
+      browserTabId: tabData.tabId,
+    });
+
     targetContainer.links.unshift(newLink);
     persist();
     render();
 
     // Close the browser tab after successful drop
-    chrome.tabs.remove(tabData.tabId, () => {
-      // Refresh the sidebar to show updated tab list
-      fetchOpenBrowserTabs().then(() => renderOpenTabsList());
-    });
+    try {
+      if (tabData.tabId && typeof tabData.tabId === 'number') {
+        chrome.tabs.remove(tabData.tabId);
+        // Refresh the sidebar to show updated tab list
+        setTimeout(() => {
+          fetchOpenBrowserTabs().then(() => renderOpenTabsList());
+        }, 100);
+      }
+    } catch (err) {
+      console.warn('[LaterList] Could not close browser tab:', err);
+    }
 
     // Show success feedback
     const status = createStatusOverlay();

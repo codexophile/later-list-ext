@@ -15,6 +15,7 @@ let state = {
   refreshLastResult: null,
   openBrowserTabs: [],
   sidebarOpen: false,
+  sidebarInitialized: false,
 };
 
 const dragHoverSwitch = {
@@ -2681,8 +2682,11 @@ function render() {
   // Now that the active area is attached to the document, initialize Sortable.
   initSortable(activeArea);
 
-  // Initialize sidebar
-  initSidebar();
+  // Initialize sidebar (only once)
+  if (!state.sidebarInitialized) {
+    initSidebar();
+    state.sidebarInitialized = true;
+  }
 }
 
 // ============================================================================
@@ -2715,7 +2719,7 @@ function renderOpenTabsList() {
       className: 'open-tab-item',
       draggable: true,
     });
-    
+
     // Store the browser tab data directly on the element
     tabEl._laterlistBrowserTab = tab;
 
@@ -2909,6 +2913,11 @@ function handleTabDropOnContainer(containerEl, tabData) {
     });
 
     targetContainer.links.unshift(newLink);
+    
+    // Clear the dragged tab data immediately to prevent duplicate processing
+    sidebarDrag.draggedTabData = null;
+    sidebarDrag.draggedElement = null;
+    
     persist();
     render();
 

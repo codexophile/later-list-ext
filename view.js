@@ -13,6 +13,8 @@ let state = {
   selectedLinks: new Set(),
   refreshingImages: false,
   refreshLastResult: null,
+  openBrowserTabs: [],
+  sidebarOpen: false,
 };
 
 const dragHoverSwitch = {
@@ -20,6 +22,11 @@ const dragHoverSwitch = {
   timer: null,
   targetTabId: null,
   highlightEl: null,
+};
+
+const sidebarDrag = {
+  draggedTabData: null,
+  draggedElement: null,
 };
 
 const DEFAULT_URL_CLEANUP = {
@@ -1564,6 +1571,8 @@ function renderActiveTab(container) {
   containersGrid.dataset.tabId = tab.id;
   tab.containers.forEach(containerData => {
     const containerEl = createEl('div', { className: 'container' });
+    containerEl.dataset.tabId = tab.id;
+    containerEl.dataset.containerId = containerData.id;
     const header = createEl('div', { className: 'container-header' });
     // Bulk select checkbox in container header
     let containerSelectWrapper = null;
@@ -2671,6 +2680,218 @@ function render() {
 
   // Now that the active area is attached to the document, initialize Sortable.
   initSortable(activeArea);
+
+  // Initialize sidebar
+  initSidebar();
+}
+
+// ============================================================================
+// SIDEBAR FUNCTIONS
+// ============================================================================
+
+async function fetchOpenBrowserTabs() {
+  try {
+    const tabs = await chrome.tabs.query({});
+    state.openBrowserTabs = tabs;
+    return tabs;
+  } catch (err) {
+    console.warn('[LaterList] Failed to fetch open tabs:', err);
+    return [];
+  }
+}
+
+function renderOpenTabsList() {
+  const list = document.getElementById('open-tabs-list');
+  if (!list) return;
+
+  if (state.openBrowserTabs.length === 0) {
+    list.innerHTML = '<div class="sidebar-loading">No open tabs</div>';
+    return;
+  }
+
+  list.replaceChildren();
+  state.openBrowserTabs.forEach(tab => {
+    const tabEl = createEl('div', {
+      className: 'open-tab-item',
+      draggable: true,
+      dataset: {
+        tabId: tab.id,
+        tabUrl: tab.url,
+      },
+    });
+
+    const title = createEl('div', {
+      className: 'open-tab-title',
+      textContent: tab.title || tab.url || 'Untitled',
+    });
+
+    const url = createEl('div', {
+      className: 'open-tab-url',
+      textContent: tab.url || 'about:blank',
+    });
+
+    tabEl.appendChild(title);
+    tabEl.appendChild(url);
+
+    // Drag events for sidebar tabs
+    tabEl.addEventListener('dragstart', onSidebarTabDragStart);
+    tabEl.addEventListener('dragend', onSidebarTabDragEnd);
+    tabEl.addEventListener('dragover', onSidebarTabDragOver);
+    tabEl.addEventListener('dragleave', onSidebarTabDragLeave);
+
+    list.appendChild(tabEl);
+  });
+}
+
+function onSidebarTabDragStart(evt) {
+  const tabEl = evt.currentTarget;
+  sidebarDrag.draggedElement = tabEl;
+  sidebarDrag.draggedTabData = {
+    tabId: parseInt(tabEl.dataset.tabId),
+    url: tabEl.dataset.tabUrl,
+    title: tabEl.querySelector('.open-tab-title')?.textContent || '',
+  };
+
+  evt.dataTransfer.effectAllowed = 'move';
+  evt.dataTransfer.setData(
+    'application/x-laterlist-tab',
+    JSON.stringify(sidebarDrag.draggedTabData)
+  );
+  tabEl.classList.add('dragging');
+  setDragHoverActive(true);
+}
+
+function onSidebarTabDragEnd(evt) {
+  const tabEl = evt.currentTarget;
+  tabEl.classList.remove('dragging');
+  setDragHoverActive(false);
+  sidebarDrag.draggedElement = null;
+  sidebarDrag.draggedTabData = null;
+
+  // Remove all drop-target indicators
+  document.querySelectorAll('.container.drop-target').forEach(el => {
+    el.classList.remove('drop-target');
+  });
+}
+
+function onSidebarTabDragOver(evt) {
+  evt.preventDefault();
+  evt.dataTransfer.dropEffect = 'move';
+}
+
+function onSidebarTabDragLeave(evt) {
+  const tabEl = evt.currentTarget;
+  tabEl.classList.remove('drag-over');
+}
+
+async function toggleSidebar() {
+  state.sidebarOpen = !state.sidebarOpen;
+  const sidebar = document.getElementById('sidebar');
+  if (sidebar) {
+    if (state.sidebarOpen) {
+      sidebar.classList.add('open');
+      await fetchOpenBrowserTabs();
+      renderOpenTabsList();
+    } else {
+      sidebar.classList.remove('open');
+    }
+  }
+}
+
+function closeSidebar() {
+  state.sidebarOpen = false;
+  const sidebar = document.getElementById('sidebar');
+  if (sidebar) {
+    sidebar.classList.remove('open');
+  }
+}
+
+function initSidebar() {
+  const toggleBtn = document.getElementById('sidebar-toggle');
+  const closeBtn = document.getElementById('sidebar-close');
+  const sidebar = document.getElementById('sidebar');
+
+  if (toggleBtn) {
+    toggleBtn.addEventListener('click', toggleSidebar);
+  }
+
+  if (closeBtn) {
+    closeBtn.addEventListener('click', closeSidebar);
+  }
+
+  if (sidebar) {
+    // Add drop zone listeners to all containers
+    document.addEventListener('dragover', evt => {
+      const container = evt.target.closest('.container');
+      if (container && sidebarDrag.draggedTabData) {
+        evt.preventDefault();
+        evt.dataTransfer.dropEffect = 'move';
+        container.classList.add('drop-target');
+      }
+    });
+
+    document.addEventListener('dragleave', evt => {
+      const container = evt.target.closest('.container');
+      if (container && !container.contains(evt.relatedTarget)) {
+        container.classList.remove('drop-target');
+      }
+    });
+
+    document.addEventListener('drop', evt => {
+      const container = evt.target.closest('.container');
+      if (container && sidebarDrag.draggedTabData) {
+        evt.preventDefault();
+        evt.stopPropagation();
+        container.classList.remove('drop-target');
+        handleTabDropOnContainer(container, sidebarDrag.draggedTabData);
+      }
+    });
+  }
+}
+
+function handleTabDropOnContainer(containerEl, tabData) {
+  try {
+    const containerId = containerEl.dataset.containerId;
+    const tabId = containerEl.dataset.tabId;
+
+    const targetTab = state.data.tabs.find(t => t.id === tabId);
+    const targetContainer = targetTab?.containers.find(
+      c => c.id === containerId
+    );
+
+    if (!targetContainer) {
+      console.warn('[LaterList] Target container not found');
+      return;
+    }
+
+    // Create a new link from the dragged browser tab
+    const newLink = {
+      id: `link-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      title: tabData.title || 'Untitled',
+      url: tabData.url || 'about:blank',
+      savedAt: Date.now(),
+    };
+
+    targetContainer.links.unshift(newLink);
+    persist();
+    render();
+
+    // Close the browser tab after successful drop
+    chrome.tabs.remove(tabData.tabId, () => {
+      // Refresh the sidebar to show updated tab list
+      fetchOpenBrowserTabs().then(() => renderOpenTabsList());
+    });
+
+    // Show success feedback
+    const status = createStatusOverlay();
+    status.style.display = 'flex';
+    status.innerHTML = `<div class="status-overlay-title">✓ Tab saved and closed</div>`;
+    setTimeout(() => {
+      status.style.display = 'none';
+    }, 2000);
+  } catch (err) {
+    console.error('[LaterList] Error dropping tab on container:', err);
+  }
 }
 
 async function init() {

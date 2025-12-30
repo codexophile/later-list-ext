@@ -2696,8 +2696,9 @@ function render() {
 async function fetchOpenBrowserTabs() {
   try {
     const tabs = await chrome.tabs.query({});
-    state.openBrowserTabs = tabs;
-    return tabs;
+    // Filter out pinned tabs
+    state.openBrowserTabs = tabs.filter(tab => !tab.pinned);
+    return state.openBrowserTabs;
   } catch (err) {
     console.warn('[LaterList] Failed to fetch open tabs:', err);
     return [];

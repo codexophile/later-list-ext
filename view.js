@@ -2913,11 +2913,11 @@ function handleTabDropOnContainer(containerEl, tabData) {
     });
 
     targetContainer.links.unshift(newLink);
-    
+
     // Clear the dragged tab data immediately to prevent duplicate processing
     sidebarDrag.draggedTabData = null;
     sidebarDrag.draggedElement = null;
-    
+
     persist();
     render();
 

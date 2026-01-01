@@ -223,6 +223,16 @@ h1 {
   transform: scaleX(1);
 }
 
+.tabs .sortable-chosen {
+  opacity: 0.8;
+  transform: scale(0.98);
+}
+
+.tabs .sortable-ghost {
+  opacity: 0.4;
+  border-style: dashed;
+}
+
 .tab-hover-switch {
   border-color: var(--accent);
   background: var(--accent-light);

@@ -7,6 +7,7 @@ This is a Chromium browser extension inspired by the Onetab extension. The goal 
 - Save and restore tabs
 - Organize tabs into groups
 - User-friendly interface
+- Reorder tabs directly in the view via drag-and-drop
 
 ## Installation
 

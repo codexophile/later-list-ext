@@ -1241,10 +1241,11 @@ function renderTabs(container) {
 
   state.data.tabs.forEach(tab => {
     const tabEl = createEl('div', {
-      className: `tab${tab.id === state.activeTabId ? ' active' : ''}`,
+      className: `tab draggable-tab${tab.id === state.activeTabId ? ' active' : ''}`,
       onClick: e => {
         setActiveTab(tab.id);
       },
+      attrs: { title: 'Click to open, drag to reorder tabs' },
     });
 
     tabEl.dataset.tabId = tab.id;
@@ -2970,6 +2971,44 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 function initSortable(rootEl) {
   if (!window.Sortable) return;
   if (!rootEl) return;
+
+  // Tabs (user tabs only; excludes Trash/Duplicates/add button)
+  document.querySelectorAll('.tabs').forEach(listEl => {
+    if (listEl._laterlistTabSortable) {
+      listEl._laterlistTabSortable.destroy();
+      listEl._laterlistTabSortable = null;
+    }
+
+    listEl._laterlistTabSortable = new Sortable(listEl, {
+      group: { name: 'tabs', pull: false, put: false },
+      animation: 150,
+      draggable: '.draggable-tab',
+      direction: 'horizontal',
+      ghostClass: 'sortable-ghost',
+      onStart: () => setDragHoverActive(true),
+      onEnd: () => {
+        try {
+          const orderedIds = Array.from(
+            listEl.querySelectorAll('.draggable-tab')
+          ).map(el => el.dataset.tabId);
+          if (orderedIds.length !== state.data.tabs.length) return;
+
+          const currentOrder = state.data.tabs.map(t => t.id);
+          const changed = orderedIds.some((id, idx) => id !== currentOrder[idx]);
+          if (!changed) return;
+
+          const tabById = new Map(state.data.tabs.map(t => [t.id, t]));
+          state.data.tabs = orderedIds
+            .map(id => tabById.get(id))
+            .filter(Boolean);
+          persist();
+          render();
+        } finally {
+          setDragHoverActive(false);
+        }
+      },
+    });
+  });
 
   // Links
   rootEl.querySelectorAll('.container-content').forEach(listEl => {

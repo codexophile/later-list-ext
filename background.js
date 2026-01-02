@@ -145,6 +145,14 @@ function formatContainerName(date, formatString) {
   return result;
 }
 
+// Helper function to check if URL supports extraction
+function canExtractFromUrl(url) {
+  if (!url) return false;
+  const lower = url.toLowerCase();
+  // Only allow http and https
+  return lower.startsWith('http://') || lower.startsWith('https://');
+}
+
 async function sendAllBrowserTabsToLaterList() {
   try {
     // Get all browser tabs from all windows
@@ -203,8 +211,8 @@ async function sendAllBrowserTabsToLaterList() {
           savedAt: Date.now(),
         };
 
-        // Extract images and metadata if possible
-        if (typeof tab.id === 'number') {
+        // Extract images and metadata if possible (only for http/https URLs)
+        if (typeof tab.id === 'number' && canExtractFromUrl(tab.url)) {
           try {
             const rule = getActiveImageRule(settings, tab.url);
             // Use fetch-based extraction for discarded tabs
@@ -378,8 +386,8 @@ async function sendTabsAroundCurrentTab(direction) {
           savedAt: Date.now(),
         };
 
-        // Extract images and metadata if possible
-        if (typeof tab.id === 'number') {
+        // Extract images and metadata if possible (only for http/https URLs)
+        if (typeof tab.id === 'number' && canExtractFromUrl(tab.url)) {
           try {
             const rule = getActiveImageRule(settings, tab.url);
             // Use fetch-based extraction for discarded tabs

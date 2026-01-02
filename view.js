@@ -1241,7 +1241,9 @@ function renderTabs(container) {
 
   state.data.tabs.forEach(tab => {
     const tabEl = createEl('div', {
-      className: `tab draggable-tab${tab.id === state.activeTabId ? ' active' : ''}`,
+      className: `tab draggable-tab${
+        tab.id === state.activeTabId ? ' active' : ''
+      }`,
       onClick: e => {
         setActiveTab(tab.id);
       },
@@ -2994,7 +2996,9 @@ function initSortable(rootEl) {
           if (orderedIds.length !== state.data.tabs.length) return;
 
           const currentOrder = state.data.tabs.map(t => t.id);
-          const changed = orderedIds.some((id, idx) => id !== currentOrder[idx]);
+          const changed = orderedIds.some(
+            (id, idx) => id !== currentOrder[idx]
+          );
           if (!changed) return;
 
           const tabById = new Map(state.data.tabs.map(t => [t.id, t]));

@@ -8,6 +8,7 @@ This is a Chromium browser extension inspired by the Onetab extension. The goal 
 - Organize tabs into groups
 - User-friendly interface
 - Reorder tabs directly in the view via drag-and-drop
+- Main view stays open in a single pinned tab to avoid duplicates
 
 ## Installation
 
@@ -18,7 +19,7 @@ This is a Chromium browser extension inspired by the Onetab extension. The goal 
 ## Usage
 
 - Click the extension icon to save your current tabs.
-- Access saved tabs from the popup interface.
+- Access saved tabs from the popup interface. The main LaterList view lives in a pinned tab; actions reuse that tab instead of opening new ones.
 
 ## License
 

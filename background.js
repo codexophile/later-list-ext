@@ -89,6 +89,46 @@ const DEFAULT_DATA = {
   trash: [],
 };
 
+const VIEW_URL = chrome.runtime.getURL('view.html');
+
+function getViewTabQueryPatterns() {
+  return [VIEW_URL, `${VIEW_URL}#*`, `${VIEW_URL}?*`];
+}
+
+async function ensureViewTab({ activate = false, reload = false, pinned = true } = {}) {
+  try {
+    const viewTabs = await chrome.tabs.query({ url: getViewTabQueryPatterns() });
+    let target = viewTabs[0];
+
+    if (target) {
+      const updates = {};
+      if (pinned && !target.pinned) updates.pinned = true;
+      if (activate) updates.active = true;
+
+      if (Object.keys(updates).length > 0) {
+        target = await chrome.tabs.update(target.id, updates);
+      }
+
+      if (reload) {
+        try {
+          await chrome.tabs.reload(target.id);
+        } catch {}
+      }
+
+      return target;
+    }
+
+    return await chrome.tabs.create({
+      url: 'view.html',
+      active: activate,
+      pinned,
+    });
+  } catch (err) {
+    console.warn('Could not ensure view tab:', err);
+    return null;
+  }
+}
+
 async function getData() {
   const stored = await chrome.storage.local.get('readLaterData');
   if (stored.readLaterData) return stored.readLaterData;
@@ -159,7 +199,7 @@ async function sendAllBrowserTabsToLaterList() {
     const allBrowserTabs = await chrome.tabs.query({});
 
     // Get the view.html URL to filter it out
-    const viewUrl = chrome.runtime.getURL('view.html');
+    const viewUrl = VIEW_URL;
 
     // Filter: exclude pinned tabs and view.html
     const tabsToSave = allBrowserTabs.filter(
@@ -256,20 +296,7 @@ async function sendAllBrowserTabsToLaterList() {
       }
     }
 
-    // Open or activate view.html and reload it
-    try {
-      const viewTabs = await chrome.tabs.query({ url: viewUrl });
-      if (viewTabs.length > 0) {
-        // View tab exists, activate and reload it
-        await chrome.tabs.update(viewTabs[0].id, { active: true });
-        await chrome.tabs.reload(viewTabs[0].id);
-      } else {
-        // Open new view tab
-        await chrome.tabs.create({ url: 'view.html', active: true });
-      }
-    } catch (err) {
-      console.warn('Could not open/reload view.html:', err);
-    }
+    await ensureViewTab({ activate: true, reload: true });
 
     return {
       success: true,
@@ -314,7 +341,7 @@ async function sendTabsAroundCurrentTab(direction) {
     }
 
     // Get the view.html URL to filter it out
-    const viewUrl = chrome.runtime.getURL('view.html');
+    const viewUrl = VIEW_URL;
 
     // Find active tab index
     const activeTabIndex = windowTabs.findIndex(t => t.id === activeTab.id);
@@ -431,20 +458,7 @@ async function sendTabsAroundCurrentTab(direction) {
       }
     }
 
-    // Open or activate view.html and reload it
-    try {
-      const viewTabs = await chrome.tabs.query({ url: viewUrl });
-      if (viewTabs.length > 0) {
-        // View tab exists, activate and reload it
-        await chrome.tabs.update(viewTabs[0].id, { active: true });
-        await chrome.tabs.reload(viewTabs[0].id);
-      } else {
-        // Open new view tab
-        await chrome.tabs.create({ url: 'view.html', active: true });
-      }
-    } catch (err) {
-      console.warn('Could not open/reload view.html:', err);
-    }
+    await ensureViewTab({ activate: true, reload: true });
 
     return {
       success: true,
@@ -1361,7 +1375,7 @@ function createContextMenus() {
 chrome.runtime.onInstalled.addListener(async () => {
   await getData();
   createContextMenus();
-  chrome.tabs.create({ url: 'view.html' });
+  await ensureViewTab({ activate: true, pinned: true });
   // Set a pleasant badge background for the saved indicator
   try {
     await chrome.action.setBadgeBackgroundColor({ color: '#2E7D32' });
@@ -1369,9 +1383,9 @@ chrome.runtime.onInstalled.addListener(async () => {
   console.log('LaterList installed and initialized.');
 });
 
-chrome.runtime.onStartup.addListener(() => {
+chrome.runtime.onStartup.addListener(async () => {
   createContextMenus();
-  chrome.tabs.create({ url: 'view.html' });
+  await ensureViewTab({ pinned: true });
 });
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {

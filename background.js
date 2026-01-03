@@ -95,9 +95,15 @@ function getViewTabQueryPatterns() {
   return [VIEW_URL, `${VIEW_URL}#*`, `${VIEW_URL}?*`];
 }
 
-async function ensureViewTab({ activate = false, reload = false, pinned = true } = {}) {
+async function ensureViewTab({
+  activate = false,
+  reload = false,
+  pinned = true,
+} = {}) {
   try {
-    const viewTabs = await chrome.tabs.query({ url: getViewTabQueryPatterns() });
+    const viewTabs = await chrome.tabs.query({
+      url: getViewTabQueryPatterns(),
+    });
     let target = viewTabs[0];
 
     if (target) {

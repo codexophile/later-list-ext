@@ -387,6 +387,19 @@ h1 {
   transition: opacity 0.2s ease;
 }
 
+.meta-progress-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  padding: 2px 8px;
+  background: rgba(245, 158, 11, 0.12);
+  color: #f59e0b;
+  border: 1px solid rgba(245, 158, 11, 0.5);
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
 .container-header:hover .link-count {
   opacity: 0;
 }
@@ -504,6 +517,31 @@ h1 {
   background: rgba(63, 185, 80, 0.12);
   color: #3fb950;
   border-color: rgba(63, 185, 80, 0.55);
+}
+
+.meta-badge {
+  background: rgba(99, 102, 241, 0.12);
+  color: var(--text-secondary);
+  border-color: rgba(99, 102, 241, 0.4);
+}
+
+.meta-badge.meta-pending,
+.meta-badge.meta-processing {
+  background: rgba(245, 158, 11, 0.12);
+  color: #f59e0b;
+  border-color: rgba(245, 158, 11, 0.6);
+}
+
+.meta-badge.meta-failed {
+  background: rgba(248, 81, 73, 0.15);
+  color: #f85149;
+  border-color: rgba(248, 81, 73, 0.6);
+}
+
+.meta-badge.meta-skipped {
+  background: rgba(145, 152, 161, 0.12);
+  color: #9198a1;
+  border-color: rgba(145, 152, 161, 0.45);
 }
 
 .link-favicon {

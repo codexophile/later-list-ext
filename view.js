@@ -1613,6 +1613,16 @@ function renderActiveTab(container) {
       className: 'link-count',
       textContent: `${containerData.links.length} links`,
     });
+    const pendingMetaCount = containerData.links.filter(l =>
+      ['pending', 'processing'].includes(l.metaStatus)
+    ).length;
+    if (pendingMetaCount > 0) {
+      const metaStat = createEl('span', {
+        className: 'meta-progress-badge',
+        textContent: `${pendingMetaCount} meta pending`,
+      });
+      stats.appendChild(metaStat);
+    }
     const headerActions = createEl('div', { className: 'container-actions' });
 
     const renameBtn = createEl('button', {
@@ -1736,6 +1746,25 @@ function renderActiveTab(container) {
       });
 
       linkInfo.appendChild(anchor);
+      // Metadata status badge
+      const meta = link.metaStatus || 'done';
+      if (meta !== 'done') {
+        const metaBadge = createEl('span', {
+          className: `link-badge meta-badge meta-${meta}`,
+          textContent:
+            meta === 'pending'
+              ? 'Meta pending'
+              : meta === 'processing'
+              ? 'Meta…'
+              : meta === 'failed'
+              ? 'Meta failed'
+              : meta === 'skipped'
+              ? 'Meta skipped'
+              : 'Meta',
+          title: link.metaError || '',
+        });
+        linkInfo.appendChild(metaBadge);
+      }
       const imgCount = Array.isArray(link.imageUrls)
         ? link.imageUrls.length
         : link.imageUrl

@@ -887,6 +887,10 @@ async function extractFromHtml(html, url, rule = { allow: [], deny: [] }) {
   };
 
   try {
+    if (typeof DOMParser === 'undefined') {
+      // DOMParser is not available in MV3 service workers; skip HTML parsing.
+      return result;
+    }
     const parser = new DOMParser();
     const doc = parser.parseFromString(html, 'text/html');
 

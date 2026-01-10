@@ -949,6 +949,55 @@ async function fetchImageForPage(url) {
   return [];
 }
 
+async function extractMetadataForLink({ url, linkId } = {}) {
+  if (!url) {
+    throw new Error('URL is required for metadata extraction');
+  }
+
+  let tempTab = null;
+  try {
+    // Create a hidden tab to extract metadata
+    tempTab = await chrome.tabs.create({ url, active: false });
+
+    // Wait for the page to load
+    await new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error('Page load timeout'));
+      }, 30000); // 30 second timeout
+
+      const listener = (tabId, changeInfo) => {
+        if (tabId === tempTab.id && changeInfo.status === 'complete') {
+          clearTimeout(timeout);
+          chrome.tabs.onUpdated.removeListener(listener);
+          resolve();
+        }
+      };
+      chrome.tabs.onUpdated.addListener(listener);
+    });
+
+    // Get settings for image rules
+    const settings = await getSettings();
+    const rule = getActiveImageRule(settings, url);
+
+    // Extract metadata using the existing function
+    const metadata = await extractFromTab(tempTab.id, url, rule);
+
+    return metadata;
+  } catch (err) {
+    console.warn('[LaterList] extractMetadataForLink failed for', url, err);
+    throw new Error(err.message || 'Failed to extract metadata');
+  } finally {
+    // Always clean up the temporary tab
+    if (tempTab?.id) {
+      try {
+        await chrome.tabs.remove(tempTab.id);
+      } catch (e) {
+        console.warn('[LaterList] Failed to close temp tab:', e);
+      }
+    }
+  }
+}
+
 async function refreshMissingImages({ limit = 50 } = {}) {
   const data = await getData();
 
@@ -1685,6 +1734,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === 'laterlist:refreshImages') {
     refreshMissingImages(message.payload || {})
       .then(result => sendResponse({ success: true, result }))
+      .catch(err => sendResponse({ success: false, error: err?.message }));
+    return true;
+  }
+  if (message?.type === 'laterlist:extractMetadata') {
+    extractMetadataForLink(message.payload || {})
+      .then(metadata => sendResponse({ success: true, metadata }))
       .catch(err => sendResponse({ success: false, error: err?.message }));
     return true;
   }

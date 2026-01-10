@@ -3222,6 +3222,50 @@ function showContextMenu(event, linkData) {
 
   items.push(null); // Divider
 
+  // Extract metadata & images
+  items.push({
+    label: 'Extract metadata & images',
+    icon: '🔄',
+    action: async () => {
+      hideContextMenu();
+      try {
+        // Get the actual link from data structure
+        const actualLink = getLinkById(tabId, containerId, linkId);
+        if (!actualLink) {
+          console.error('Link not found');
+          return;
+        }
+
+        // Mark link as processing
+        actualLink.metaStatus = 'processing';
+        render();
+
+        const response = await chrome.runtime.sendMessage({
+          type: 'laterlist:extractMetadata',
+          payload: { url: actualLink.url, linkId: actualLink.id },
+        });
+
+        if (response?.success && response.metadata) {
+          // Update link with extracted metadata
+          Object.assign(actualLink, response.metadata);
+          actualLink.metaStatus = 'done';
+          console.log('Metadata extracted:', response.metadata);
+        } else {
+          actualLink.metaStatus = 'failed';
+          console.error('Metadata extraction failed:', response?.error);
+        }
+
+        await persist();
+        render();
+      } catch (err) {
+        const actualLink = getLinkById(tabId, containerId, linkId);
+        if (actualLink) actualLink.metaStatus = 'failed';
+        console.error('Failed to extract metadata:', err);
+        render();
+      }
+    },
+  });
+
   // Archive option
   items.push({
     label: 'Archive',
@@ -3388,6 +3432,52 @@ function showContextMenuTrash(event, link) {
       },
     });
   }
+
+  items.push(null); // Divider
+
+  // Extract metadata & images
+  items.push({
+    label: 'Extract metadata & images',
+    icon: '🔄',
+    action: async () => {
+      hideContextMenu();
+      try {
+        // Find the actual link in trash
+        const actualLink = state.data.trash.find(l => l.id === link.id);
+        if (!actualLink) {
+          console.error('Trash link not found');
+          return;
+        }
+
+        // Mark link as processing
+        actualLink.metaStatus = 'processing';
+        render();
+
+        const response = await chrome.runtime.sendMessage({
+          type: 'laterlist:extractMetadata',
+          payload: { url: actualLink.url, linkId: actualLink.id },
+        });
+
+        if (response?.success && response.metadata) {
+          // Update link with extracted metadata
+          Object.assign(actualLink, response.metadata);
+          actualLink.metaStatus = 'done';
+          console.log('Metadata extracted:', response.metadata);
+        } else {
+          actualLink.metaStatus = 'failed';
+          console.error('Metadata extraction failed:', response?.error);
+        }
+
+        await persist();
+        render();
+      } catch (err) {
+        const actualLink = state.data.trash.find(l => l.id === link.id);
+        if (actualLink) actualLink.metaStatus = 'failed';
+        console.error('Failed to extract metadata:', err);
+        render();
+      }
+    },
+  });
 
   items.push(null); // Divider
 

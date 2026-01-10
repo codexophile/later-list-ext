@@ -3134,15 +3134,52 @@ function ensureContextMenu() {
   document.body.appendChild(contextMenuBackdrop);
   document.body.appendChild(contextMenu);
 
-  contextMenuBackdrop.addEventListener('click', hideContextMenu);
-  document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') hideContextMenu();
+  // Prevent clicks inside the menu from closing it
+  contextMenu.addEventListener('click', e => {
+    e.stopPropagation();
   });
+
+  // Close menu when clicking on backdrop
+  contextMenuBackdrop.addEventListener('click', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    hideContextMenu();
+  });
+
+  // Close menu on Escape key
+  const escapeHandler = e => {
+    if (e.key === 'Escape' && contextMenu?.classList.contains('show')) {
+      hideContextMenu();
+    }
+  };
+  document.addEventListener('keydown', escapeHandler);
+
+  // Close menu when clicking anywhere outside it (using bubbling phase)
+  const outsideClickHandler = e => {
+    if (!contextMenu || !contextMenu.classList.contains('show')) return;
+
+    // If click is on the menu or backdrop, don't close
+    if (
+      contextMenu.contains(e.target) ||
+      contextMenuBackdrop.contains(e.target)
+    ) {
+      return;
+    }
+
+    // Click was outside, so close the menu
+    hideContextMenu();
+  };
+
+  // Use setTimeout to avoid conflicts with the initial context menu open
+  setTimeout(() => {
+    document.addEventListener('click', outsideClickHandler);
+  }, 0);
 
   return contextMenu;
 }
 
 function showContextMenu(event, linkData) {
+  console.log('showContextMenu called with:', linkData);
   event.preventDefault();
   event.stopPropagation();
 
@@ -3150,7 +3187,11 @@ function showContextMenu(event, linkData) {
   const menu = ensureContextMenu();
   const { tabId, containerId, linkId } = linkData;
   const link = getLinkById(tabId, containerId, linkId);
-  if (!link) return;
+  console.log('Link found:', link);
+  if (!link) {
+    console.error('Link not found!');
+    return;
+  }
 
   // Build menu items
   const items = [];
@@ -3329,7 +3370,6 @@ function showContextMenu(event, linkData) {
     } else {
       const btn = createEl('button', {
         className: `context-menu-item${item.danger ? ' danger' : ''}`,
-        onClick: item.action,
       });
 
       const icon = createEl('span', {
@@ -3340,6 +3380,14 @@ function showContextMenu(event, linkData) {
 
       btn.appendChild(icon);
       btn.appendChild(label);
+
+      // Add click handler with proper event handling
+      btn.addEventListener('click', e => {
+        e.preventDefault();
+        e.stopPropagation();
+        item.action();
+      });
+
       menu.appendChild(btn);
     }
   });
@@ -3363,11 +3411,13 @@ function showContextMenu(event, linkData) {
   menu.style.top = y + 'px';
   menu.classList.add('show');
   contextMenuBackdrop.classList.add('show');
+  console.log('Context menu shown at:', { x, y }, 'Menu element:', menu);
 }
 
 function hideContextMenu() {
   if (contextMenu) {
     contextMenu.classList.remove('show');
+    contextMenu.style.display = ''; // Clear inline display style
   }
   if (contextMenuBackdrop) {
     contextMenuBackdrop.classList.remove('show');
@@ -3515,7 +3565,6 @@ function showContextMenuTrash(event, link) {
     } else {
       const btn = createEl('button', {
         className: `context-menu-item${item.danger ? ' danger' : ''}`,
-        onClick: item.action,
       });
 
       const icon = createEl('span', {
@@ -3526,6 +3575,14 @@ function showContextMenuTrash(event, link) {
 
       btn.appendChild(icon);
       btn.appendChild(label);
+
+      // Add click handler with proper event handling
+      btn.addEventListener('click', e => {
+        e.preventDefault();
+        e.stopPropagation();
+        item.action();
+      });
+
       menu.appendChild(btn);
     }
   });

@@ -30,6 +30,94 @@ const sidebarDrag = {
   draggedElement: null,
 };
 
+// Virtual scroller for high-performance rendering of large link lists
+class VirtualScroller {
+  constructor(container, items, renderItem, options = {}) {
+    this.container = container;
+    this.items = items;
+    this.renderItem = renderItem;
+    this.itemHeight = options.itemHeight || 56; // Estimated height per link row
+    this.bufferSize = options.bufferSize || 5; // Extra items to render above/below viewport
+    this.visibleRange = { start: 0, end: 0 };
+
+    // Create viewport and inner container
+    this.viewport = document.createElement('div');
+    this.viewport.className = 'virtual-scroller-viewport';
+    this.viewport.style.overflowY = 'auto';
+    this.viewport.style.height = '100%';
+
+    this.innerContainer = document.createElement('div');
+    this.innerContainer.className = 'virtual-scroller-inner';
+
+    this.viewport.appendChild(this.innerContainer);
+    this.container.appendChild(this.viewport);
+
+    // Spacers for virtualizing
+    this.topSpacer = document.createElement('div');
+    this.bottomSpacer = document.createElement('div');
+    this.contentContainer = document.createElement('div');
+
+    this.innerContainer.appendChild(this.topSpacer);
+    this.innerContainer.appendChild(this.contentContainer);
+    this.innerContainer.appendChild(this.bottomSpacer);
+
+    this.viewport.addEventListener('scroll', () => this.onScroll());
+    this.render();
+  }
+
+  getVisibleRange() {
+    const scrollTop = this.viewport.scrollTop;
+    const viewportHeight = this.viewport.clientHeight;
+
+    let start = Math.floor(scrollTop / this.itemHeight) - this.bufferSize;
+    let end =
+      Math.ceil((scrollTop + viewportHeight) / this.itemHeight) +
+      this.bufferSize;
+
+    start = Math.max(0, start);
+    end = Math.min(this.items.length, end);
+
+    return { start, end };
+  }
+
+  onScroll() {
+    const newRange = this.getVisibleRange();
+    if (
+      newRange.start !== this.visibleRange.start ||
+      newRange.end !== this.visibleRange.end
+    ) {
+      this.visibleRange = newRange;
+      this.render();
+    }
+  }
+
+  render() {
+    const { start, end } = this.visibleRange;
+
+    // Update spacers
+    this.topSpacer.style.height = `${start * this.itemHeight}px`;
+    this.bottomSpacer.style.height = `${Math.max(
+      0,
+      (this.items.length - end) * this.itemHeight
+    )}px`;
+
+    // Clear and render visible items
+    this.contentContainer.innerHTML = '';
+    for (let i = start; i < end; i++) {
+      const item = this.items[i];
+      const element = this.renderItem(item, i);
+      this.contentContainer.appendChild(element);
+    }
+  }
+
+  updateItems(items) {
+    this.items = items;
+    this.visibleRange = { start: 0, end: 0 };
+    this.viewport.scrollTop = 0;
+    this.render();
+  }
+}
+
 const DEFAULT_URL_CLEANUP = {
   enabled: true,
   stripTrackingParams: true,
@@ -1453,6 +1541,186 @@ function restoreLink(linkId) {
   render();
 }
 
+// Helper function to create a link row element for rendering
+function createLinkRowElement(link, tab, container) {
+  const isDuplicate = state.duplicateUrls.has(normalizeUrl(link.url));
+  const linkRow = createEl('div', {
+    className: isDuplicate ? 'link duplicate-link' : 'link',
+  });
+
+  // Bulk-select checkbox per link
+  if (state.bulkMode) {
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.className = 'link-select-checkbox';
+    cb.checked = isLinkSelected(tab.id, container.id, link.id);
+    cb.addEventListener('click', e => {
+      e.stopPropagation();
+      e.preventDefault();
+      const checked = !isLinkSelected(tab.id, container.id, link.id);
+      setLinkSelected(tab.id, container.id, link.id, checked);
+      render();
+    });
+    linkRow.appendChild(cb);
+    if (isLinkSelected(tab.id, container.id, link.id)) {
+      linkRow.classList.add('selected');
+    }
+  }
+
+  const favicon = createEl('img', {
+    className: 'link-favicon',
+    attrs: {
+      src: `https://www.google.com/s2/favicons?sz=32&domain=${
+        new URL(link.url).hostname
+      }`,
+      alt: '',
+      loading: 'lazy',
+    },
+  });
+  favicon.onerror = () => {
+    favicon.style.display = 'none';
+  };
+
+  const linkInfo = createEl('div', { className: 'link-info-wrapper' });
+  const anchor = createEl('a', {
+    textContent: link.title,
+    attrs: { href: link.url, target: '_blank' },
+  });
+  anchor.addEventListener('click', e => {
+    e.preventDefault();
+    handleOpenLink(link.url, tab.id, container.id, link.id);
+  });
+
+  linkInfo.appendChild(anchor);
+
+  // Metadata status badge
+  const meta = link.metaStatus || 'done';
+  if (meta !== 'done') {
+    const metaBadge = createEl('span', {
+      className: `link-badge meta-badge meta-${meta}`,
+      textContent:
+        meta === 'pending'
+          ? 'Meta pending'
+          : meta === 'processing'
+          ? 'Meta…'
+          : meta === 'failed'
+          ? 'Meta failed'
+          : meta === 'skipped'
+          ? 'Meta skipped'
+          : 'Meta',
+      title: link.metaError || '',
+    });
+    linkInfo.appendChild(metaBadge);
+  }
+
+  const imgCount = Array.isArray(link.imageUrls)
+    ? link.imageUrls.length
+    : link.imageUrl
+    ? 1
+    : 0;
+  if (imgCount > 0) {
+    const imageBadge = createEl('span', {
+      className: 'link-badge image-badge',
+      textContent: imgCount > 1 ? String(imgCount) : 'IMG',
+    });
+    imageBadge.addEventListener('click', e => {
+      e.stopPropagation();
+      e.preventDefault();
+      showImageViewer(link);
+    });
+    linkInfo.appendChild(imageBadge);
+  }
+
+  // Add hover events for status overlay
+  linkRow.addEventListener('mouseenter', () => {
+    showStatusOverlay({
+      title: link.title,
+      url: link.url,
+      savedAt: link.savedAt,
+      locked: link.locked,
+      imageUrl: link.imageUrl,
+      imageUrls: link.imageUrls,
+      type: 'regular',
+    });
+  });
+  linkRow.addEventListener('mouseleave', () => {
+    hideStatusOverlay();
+  });
+
+  anchor.addEventListener('dblclick', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    const newTitle = prompt('Edit title', link.title) || link.title;
+    const newUrl = prompt('Edit URL', link.url) || link.url;
+    if (newTitle || newUrl) {
+      editLink(tab.id, container.id, link.id, newTitle, newUrl);
+    }
+  });
+
+  const actions = createEl('div', { className: 'container-actions' });
+
+  // Lock button
+  const lockBtn = createEl('button', {
+    className: 'btn btn-lock',
+    html: link.locked ? '🔒' : '🔓',
+    onClick: () => toggleLockLink(tab.id, container.id, link.id),
+  });
+  attachTooltip(
+    lockBtn,
+    link.locked ? 'Unlock link' : 'Lock link',
+    link.locked
+      ? 'Link is locked. Click to unlock.'
+      : 'Protect link from being trashed when opened'
+  );
+  actions.appendChild(lockBtn);
+
+  const deleteBtn = createEl('button', {
+    className: 'btn btn-delete',
+    html: '🗑️',
+    onClick: () => deleteLink(tab.id, container.id, link.id),
+  });
+  attachTooltip(deleteBtn, 'Trash link', 'Send this link to Trash');
+  actions.appendChild(deleteBtn);
+
+  const detailsBtn = createEl('button', {
+    className: 'btn btn-secondary',
+    html: '🖼️',
+    onClick: e => {
+      e.stopPropagation();
+      showDetailOverlay({
+        ...link,
+        tabName: tab.name,
+        containerName: container.name,
+      });
+    },
+  });
+  attachTooltip(
+    detailsBtn,
+    'View details',
+    'Open full overlay with images and metadata'
+  );
+  actions.appendChild(detailsBtn);
+  linkRow.appendChild(favicon);
+  linkRow.appendChild(linkInfo);
+  linkRow.appendChild(actions);
+
+  // Add visual indicator for locked links
+  if (link.locked) {
+    linkRow.classList.add('link-locked');
+  }
+
+  // Add context menu on right-click
+  linkRow.addEventListener('contextmenu', e => {
+    showContextMenu(e, {
+      tabId: tab.id,
+      containerId: container.id,
+      linkId: link.id,
+    });
+  });
+
+  return linkRow;
+}
+
 function renderActiveTab(container) {
   container.innerHTML = '';
 
@@ -1695,178 +1963,31 @@ function renderActiveTab(container) {
       className: 'container-content',
       attrs: { 'data-tab-id': tab.id, 'data-container-id': containerData.id },
     });
-    containerData.links.forEach(link => {
-      const isDuplicate = state.duplicateUrls.has(normalizeUrl(link.url));
-      const linkRow = createEl('div', {
-        className: isDuplicate ? 'link duplicate-link' : 'link',
-      });
-      // Bulk-select checkbox per link
-      if (state.bulkMode) {
-        const cb = document.createElement('input');
-        cb.type = 'checkbox';
-        cb.className = 'link-select-checkbox';
-        cb.checked = isLinkSelected(tab.id, containerData.id, link.id);
-        cb.addEventListener('click', e => {
-          e.stopPropagation();
-          e.preventDefault();
-          const checked = !isLinkSelected(tab.id, containerData.id, link.id);
-          setLinkSelected(tab.id, containerData.id, link.id, checked);
-          render();
-        });
-        linkRow.appendChild(cb);
-        if (isLinkSelected(tab.id, containerData.id, link.id)) {
-          linkRow.classList.add('selected');
-        }
-      }
-      const favicon = createEl('img', {
-        className: 'link-favicon',
-        attrs: {
-          src: `https://www.google.com/s2/favicons?sz=32&domain=${
-            new URL(link.url).hostname
-          }`,
-          alt: '',
-          loading: 'lazy',
-        },
-      });
-      favicon.onerror = () => {
-        favicon.style.display = 'none';
-      };
-      const linkInfo = createEl('div', { className: 'link-info-wrapper' });
-      const anchor = createEl('a', {
-        textContent: link.title,
-        attrs: { href: link.url, target: '_blank' },
-      });
-      anchor.addEventListener('click', e => {
-        e.preventDefault();
-        handleOpenLink(link.url, tab.id, containerData.id, link.id);
+
+    // Use virtual scrolling for containers with many links (>100)
+    const VIRTUAL_SCROLL_THRESHOLD = 100;
+    if (containerData.links.length > VIRTUAL_SCROLL_THRESHOLD) {
+      // Virtual scrolling version
+      const virtualContainer = createEl('div', {
+        className: 'virtual-scroller-container',
+        style: 'height: 600px; position: relative;',
       });
 
-      linkInfo.appendChild(anchor);
-      // Metadata status badge
-      const meta = link.metaStatus || 'done';
-      if (meta !== 'done') {
-        const metaBadge = createEl('span', {
-          className: `link-badge meta-badge meta-${meta}`,
-          textContent:
-            meta === 'pending'
-              ? 'Meta pending'
-              : meta === 'processing'
-              ? 'Meta…'
-              : meta === 'failed'
-              ? 'Meta failed'
-              : meta === 'skipped'
-              ? 'Meta skipped'
-              : 'Meta',
-          title: link.metaError || '',
-        });
-        linkInfo.appendChild(metaBadge);
-      }
-      const imgCount = Array.isArray(link.imageUrls)
-        ? link.imageUrls.length
-        : link.imageUrl
-        ? 1
-        : 0;
-      if (imgCount > 0) {
-        const imageBadge = createEl('span', {
-          className: 'link-badge image-badge',
-          textContent: imgCount > 1 ? String(imgCount) : 'IMG',
-        });
-        imageBadge.addEventListener('click', e => {
-          e.stopPropagation();
-          e.preventDefault();
-          showImageViewer(link);
-        });
-        linkInfo.appendChild(imageBadge);
-      }
-
-      // Add hover events for status overlay
-      linkRow.addEventListener('mouseenter', () => {
-        showStatusOverlay({
-          title: link.title,
-          url: link.url,
-          savedAt: link.savedAt,
-          locked: link.locked,
-          imageUrl: link.imageUrl,
-          imageUrls: link.imageUrls,
-          type: 'regular',
-        });
-      });
-      linkRow.addEventListener('mouseleave', () => {
-        hideStatusOverlay();
-      });
-
-      anchor.addEventListener('dblclick', e => {
-        e.preventDefault();
-        e.stopPropagation();
-        const newTitle = prompt('Edit title', link.title) || link.title;
-        const newUrl = prompt('Edit URL', link.url) || link.url;
-        if (newTitle || newUrl) {
-          editLink(tab.id, containerData.id, link.id, newTitle, newUrl);
-        }
-      });
-      const actions = createEl('div', { className: 'container-actions' });
-
-      // Lock button
-      const lockBtn = createEl('button', {
-        className: 'btn btn-lock',
-        html: link.locked ? '🔒' : '🔓',
-        onClick: () => toggleLockLink(tab.id, containerData.id, link.id),
-      });
-      attachTooltip(
-        lockBtn,
-        link.locked ? 'Unlock link' : 'Lock link',
-        link.locked
-          ? 'Link is locked. Click to unlock.'
-          : 'Protect link from being trashed when opened'
+      new VirtualScroller(
+        virtualContainer,
+        containerData.links,
+        link => createLinkRowElement(link, tab, containerData),
+        { itemHeight: 56, bufferSize: 5 }
       );
-      actions.appendChild(lockBtn);
 
-      const deleteBtn = createEl('button', {
-        className: 'btn btn-delete',
-        html: '🗑️',
-        onClick: () => deleteLink(tab.id, containerData.id, link.id),
+      content.appendChild(virtualContainer);
+    } else {
+      // Regular rendering for small containers
+      containerData.links.forEach(link => {
+        const linkRow = createLinkRowElement(link, tab, containerData);
+        content.appendChild(linkRow);
       });
-      attachTooltip(deleteBtn, 'Trash link', 'Send this link to Trash');
-      actions.appendChild(deleteBtn);
-
-      const detailsBtn = createEl('button', {
-        className: 'btn btn-secondary',
-        html: '🖼️',
-        onClick: e => {
-          e.stopPropagation();
-          showDetailOverlay({
-            ...link,
-            tabName: tab.name,
-            containerName: containerData.name,
-          });
-        },
-      });
-      attachTooltip(
-        detailsBtn,
-        'View details',
-        'Open full overlay with images and metadata'
-      );
-      actions.appendChild(detailsBtn);
-      linkRow.appendChild(favicon);
-      linkRow.appendChild(linkInfo);
-      linkRow.appendChild(actions);
-
-      // Add visual indicator for locked links
-      if (link.locked) {
-        linkRow.classList.add('link-locked');
-      }
-
-      // Add context menu on right-click
-      linkRow.addEventListener('contextmenu', e => {
-        showContextMenu(e, {
-          tabId: tab.id,
-          containerId: containerData.id,
-          linkId: link.id,
-        });
-      });
-
-      content.appendChild(linkRow);
-    });
+    }
 
     containerEl.appendChild(header);
     containerEl.appendChild(content);

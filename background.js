@@ -287,13 +287,18 @@ async function sendAllBrowserTabsToLaterList() {
     // Get the view.html URL to filter it out
     const viewUrl = VIEW_URL;
 
-    // Filter: exclude pinned tabs and view.html
-    const tabsToSave = allBrowserTabs.filter(
-      tab =>
-        !tab.pinned &&
-        !tab.url.includes('view.html') &&
-        !tab.url.startsWith(viewUrl)
-    );
+    // Filter: exclude pinned tabs, extension pages, and view.html
+    const tabsToSave = allBrowserTabs.filter(tab => {
+      if (tab.pinned) return false;
+      if (!tab.url) return false;
+      // Exclude extension pages, chrome:// pages, etc.
+      if (!tab.url.startsWith('http://') && !tab.url.startsWith('https://'))
+        return false;
+      // Exclude view.html specifically
+      if (tab.url.includes('view.html') || tab.url.startsWith(viewUrl))
+        return false;
+      return true;
+    });
 
     if (tabsToSave.length === 0) {
       return {
@@ -326,9 +331,11 @@ async function sendAllBrowserTabsToLaterList() {
       links: [],
     };
 
-    // Convert browser tabs to links (metadata will be extracted asynchronously)
+    // Convert browser tabs to links
     const savedTabIds = [];
     const metadataJobs = [];
+    const linksByTab = new Map(); // tab.id -> link object
+
     for (const tab of tabsToSave) {
       if (tab.url && tab.id !== undefined) {
         const linkId = `link-${Date.now()}-${Math.random()
@@ -343,25 +350,66 @@ async function sendAllBrowserTabsToLaterList() {
           metaError: '',
         };
 
+        const isHttp = canExtractFromUrl(tab.url);
+        if (!tab.discarded && isHttp) {
+          // Live tab: mark for extraction, will do in parallel after loop
+          link.metaStatus = 'processing';
+          linksByTab.set(tab.id, { link, tabId: tab.id });
+        } else if (isHttp) {
+          // Hibernated tab: queue extraction for later
+          metadataJobs.push({
+            tabId: targetTab.id,
+            containerId: newContainer.id,
+            linkId,
+          });
+          link.metaStatus = 'pending';
+          link.metaError = '';
+        } else {
+          // Unsupported scheme: skip extraction
+          link.metaStatus = 'skipped';
+          link.metaError = 'Unsupported URL scheme';
+        }
+
         newContainer.links.push(link);
         savedTabIds.push(tab.id);
-        metadataJobs.push({
-          tabId: targetTab.id,
-          containerId: newContainer.id,
-          linkId,
-        });
       }
     }
 
     // Add container to the BEGINNING of the target tab
     targetTab.containers.unshift(newContainer);
 
-    // Save data
+    // Save data first
     await saveData(data);
 
-    // Enqueue metadata extraction (async, happens after tabs are closed)
-    if (metadataJobs.length) {
-      enqueueMetadataJobs(metadataJobs);
+    // Extract metadata from live tabs in parallel (non-blocking)
+    if (linksByTab.size > 0) {
+      const extractPromises = Array.from(linksByTab.values()).map(
+        async ({ link, tabId: liveTabId }) => {
+          try {
+            const rule = getActiveImageRule(settings, link.url);
+            const extracted = await extractFromTab(liveTabId, link.url, rule);
+            if (extracted.imageUrls?.length > 0) {
+              link.imageUrls = extracted.imageUrls;
+              link.imageUrl = extracted.imageUrl;
+            }
+            if (extracted.publishedAt) link.publishedAt = extracted.publishedAt;
+            if (extracted.description) link.description = extracted.description;
+            if (extracted.summary) link.summary = extracted.summary;
+            if (extracted.keywords) link.keywords = extracted.keywords;
+            link.metaStatus = 'done';
+            link.metaError = '';
+          } catch (err) {
+            link.metaStatus = 'failed';
+            link.metaError = err?.message || 'Metadata extraction failed';
+          }
+        }
+      );
+
+      // Wait for all live extractions in parallel (with timeout safety)
+      await Promise.allSettled(extractPromises);
+
+      // Save updated links
+      await saveData(data);
     }
 
     // Enqueue metadata extraction (async, happens after tabs are closed)
@@ -372,10 +420,17 @@ async function sendAllBrowserTabsToLaterList() {
     // Close successfully saved tabs
     if (savedTabIds.length > 0) {
       try {
+        console.log(
+          `[LaterList] Closing ${savedTabIds.length} tabs, IDs:`,
+          savedTabIds
+        );
         await chrome.tabs.remove(savedTabIds);
+        console.log('[LaterList] Tabs closed successfully');
       } catch (err) {
         console.warn('Some tabs could not be closed:', err);
       }
+    } else {
+      console.warn('[LaterList] No tabs to close (savedTabIds is empty)');
     }
 
     await ensureViewTab({ activate: true, reload: true });
@@ -443,13 +498,18 @@ async function sendTabsAroundCurrentTab(direction) {
       };
     }
 
-    // Filter: exclude pinned tabs and view.html
-    tabsToSave = tabsToSave.filter(
-      tab =>
-        !tab.pinned &&
-        !tab.url.includes('view.html') &&
-        !tab.url.startsWith(viewUrl)
-    );
+    // Filter: exclude pinned tabs, extension pages, and view.html
+    tabsToSave = tabsToSave.filter(tab => {
+      if (tab.pinned) return false;
+      if (!tab.url) return false;
+      // Exclude extension pages, chrome:// pages, etc.
+      if (!tab.url.startsWith('http://') && !tab.url.startsWith('https://'))
+        return false;
+      // Exclude view.html specifically
+      if (tab.url.includes('view.html') || tab.url.startsWith(viewUrl))
+        return false;
+      return true;
+    });
 
     if (tabsToSave.length === 0) {
       const directionText =
@@ -484,9 +544,11 @@ async function sendTabsAroundCurrentTab(direction) {
       links: [],
     };
 
-    // Convert browser tabs to links (metadata will be extracted asynchronously)
+    // Convert browser tabs to links
     const savedTabIds = [];
     const metadataJobs = [];
+    const linksByTab = new Map(); // tab.id -> link object
+
     for (const tab of tabsToSave) {
       if (tab.url && tab.id !== undefined) {
         const linkId = `link-${Date.now()}-${Math.random()
@@ -501,21 +563,72 @@ async function sendTabsAroundCurrentTab(direction) {
           metaError: '',
         };
 
+        const isHttp = canExtractFromUrl(tab.url);
+        if (!tab.discarded && isHttp) {
+          // Live tab: mark for extraction, will do in parallel after loop
+          link.metaStatus = 'processing';
+          linksByTab.set(tab.id, { link, tabId: tab.id });
+        } else if (isHttp) {
+          // Hibernated tab: queue extraction for later
+          metadataJobs.push({
+            tabId: targetTab.id,
+            containerId: newContainer.id,
+            linkId,
+          });
+          link.metaStatus = 'pending';
+          link.metaError = '';
+        } else {
+          // Unsupported scheme: skip extraction
+          link.metaStatus = 'skipped';
+          link.metaError = 'Unsupported URL scheme';
+        }
+
         newContainer.links.push(link);
         savedTabIds.push(tab.id);
-        metadataJobs.push({
-          tabId: targetTab.id,
-          containerId: newContainer.id,
-          linkId,
-        });
       }
     }
 
     // Add container to the BEGINNING of the target tab
     targetTab.containers.unshift(newContainer);
 
-    // Save data
+    // Save data first
     await saveData(data);
+
+    // Extract metadata from live tabs in parallel (non-blocking)
+    if (linksByTab.size > 0) {
+      const extractPromises = Array.from(linksByTab.values()).map(
+        async ({ link, tabId: liveTabId }) => {
+          try {
+            const rule = getActiveImageRule(settings, link.url);
+            const extracted = await extractFromTab(liveTabId, link.url, rule);
+            if (extracted.imageUrls?.length > 0) {
+              link.imageUrls = extracted.imageUrls;
+              link.imageUrl = extracted.imageUrl;
+            }
+            if (extracted.publishedAt) link.publishedAt = extracted.publishedAt;
+            if (extracted.description) link.description = extracted.description;
+            if (extracted.summary) link.summary = extracted.summary;
+            if (extracted.keywords) link.keywords = extracted.keywords;
+            link.metaStatus = 'done';
+            link.metaError = '';
+          } catch (err) {
+            link.metaStatus = 'failed';
+            link.metaError = err?.message || 'Metadata extraction failed';
+          }
+        }
+      );
+
+      // Wait for all live extractions in parallel (with timeout safety)
+      await Promise.allSettled(extractPromises);
+
+      // Save updated links
+      await saveData(data);
+    }
+
+    // Enqueue metadata extraction (async, happens after tabs are closed)
+    if (metadataJobs.length) {
+      enqueueMetadataJobs(metadataJobs);
+    }
 
     // Close successfully saved tabs
     if (savedTabIds.length > 0) {
@@ -1108,6 +1221,14 @@ async function extractFromTab(tabId, pageUrl, rule = { allow: [], deny: [] }) {
   };
 
   try {
+    // Safety check: only extract from http/https URLs
+    if (
+      !pageUrl ||
+      (!pageUrl.startsWith('http://') && !pageUrl.startsWith('https://'))
+    ) {
+      return result;
+    }
+
     const allowSelectors = Array.isArray(rule.allow) ? rule.allow : [];
     const denySelectors = Array.isArray(rule.deny) ? rule.deny : [];
 

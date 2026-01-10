@@ -148,8 +148,6 @@ function createStatusOverlay() {
 function showStatusOverlay(linkData) {
   const overlay = createStatusOverlay();
 
-  console.log('[LaterList] Showing status overlay for link:', linkData);
-
   let content = `<div class="status-overlay-title">${linkData.title}</div>`;
 
   // Check if this is a duplicate and show other locations
@@ -177,7 +175,6 @@ function showStatusOverlay(linkData) {
       : [];
 
   if (images.length > 0) {
-    console.log('[LaterList] Displaying', images.length, 'image(s)');
     content += `<div class="status-overlay-gallery">`;
 
     if (images.length === 1) {
@@ -199,7 +196,6 @@ function showStatusOverlay(linkData) {
 
     content += `</div>`;
   } else {
-    console.log('[LaterList] No images found for this link');
   }
 
   content += `<div class="status-overlay-section">`;

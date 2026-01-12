@@ -976,7 +976,7 @@ async function refreshTabActionState(tabId, url) {
   try {
     // Check if tab still exists before updating
     await chrome.tabs.get(tabId);
-    
+
     const saved = await isUrlSaved(url);
     const title = saved ? 'Saved in LaterList' : 'Save to LaterList';
     await chrome.action.setTitle({ tabId, title });

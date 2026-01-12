@@ -1639,7 +1639,7 @@ function createContainerElement(containerData, tab) {
   containerEl.dataset.tabId = tab.id;
   containerEl.dataset.containerId = containerData.id;
   const header = createEl('div', { className: 'container-header' });
-  
+
   // Bulk select checkbox in container header
   let containerSelectWrapper = null;
   if (state.bulkMode) {
@@ -1666,7 +1666,7 @@ function createContainerElement(containerData, tab) {
     });
     containerSelectWrapper.appendChild(containerCheckbox);
   }
-  
+
   const nameEl = createEl('div', {
     textContent: containerData.name,
     className: 'container-name',
@@ -1890,30 +1890,33 @@ function renderActiveTab(container) {
   const containersGrid = createEl('div', { className: 'containers' });
   containersGrid.dataset.tabId = tab.id;
   container.appendChild(containersGrid); // Append basic structure
-  
+
   // Use Lazy Loading for containers (better than Virtual Scrolling for variable height items)
   // This renders containers in batches as you scroll down
   const BATCH_SIZE = 20;
   let nextContainerIndex = 0;
-  
+
   function renderContainerBatch() {
-    const endIndex = Math.min(nextContainerIndex + BATCH_SIZE, tab.containers.length);
+    const endIndex = Math.min(
+      nextContainerIndex + BATCH_SIZE,
+      tab.containers.length
+    );
     for (let i = nextContainerIndex; i < endIndex; i++) {
       const containerData = tab.containers[i];
       const containerEl = createContainerElement(containerData, tab);
       containersGrid.appendChild(containerEl);
     }
     nextContainerIndex = endIndex;
-    
+
     // If there are more containers, setup the observer for the next batch
     if (nextContainerIndex < tab.containers.length) {
       setupBatchObserver();
     }
   }
-  
+
   let loaderObserver = null;
   let loaderEl = null;
-  
+
   function setupBatchObserver() {
     // Cleanup previous observer/loader
     if (loaderObserver) {
@@ -1924,27 +1927,30 @@ function renderActiveTab(container) {
       loaderEl.remove();
       loaderEl = null;
     }
-    
+
     // Create sentinel element
-    loaderEl = createEl('div', { 
-      className: 'infinite-loader', 
+    loaderEl = createEl('div', {
+      className: 'infinite-loader',
       textContent: 'Loading more containers...',
-      style: 'padding: 20px; text-align: center; color: var(--text-muted);'
+      style: 'padding: 20px; text-align: center; color: var(--text-muted);',
     });
     containersGrid.appendChild(loaderEl);
-    
-    loaderObserver = new IntersectionObserver((entries) => {
-      if (entries[0].isIntersecting) {
-        // Load next batch
-        if (loaderObserver) loaderObserver.disconnect();
-        if (loaderEl) loaderEl.remove();
-        renderContainerBatch();
-      }
-    }, { rootMargin: '200px' }); // Start loading before reaching bottom
-    
+
+    loaderObserver = new IntersectionObserver(
+      entries => {
+        if (entries[0].isIntersecting) {
+          // Load next batch
+          if (loaderObserver) loaderObserver.disconnect();
+          if (loaderEl) loaderEl.remove();
+          renderContainerBatch();
+        }
+      },
+      { rootMargin: '200px' }
+    ); // Start loading before reaching bottom
+
     loaderObserver.observe(loaderEl);
   }
-  
+
   // Start initial render
   renderContainerBatch();
 

@@ -9,6 +9,7 @@ This is a Chromium browser extension inspired by the Onetab extension. The goal 
 - User-friendly interface
 - Reorder tabs directly in the view via drag-and-drop
 - Main view stays open in a single pinned tab to avoid duplicates
+- Background metadata capture: the extension automatically captures page metadata (images, description, published date, keywords) when a tab finishes loading, so sending/closing tabs is fast and metadata still appears even if tabs are later hibernated.
 
 ## Installation
 
@@ -20,6 +21,7 @@ This is a Chromium browser extension inspired by the Onetab extension. The goal 
 
 - Click the extension icon to save your current tabs.
 - Access saved tabs from the popup interface. The main LaterList view lives in a pinned tab; actions reuse that tab instead of opening new ones.
+- When browsing, metadata is captured automatically at page load. Later, when you send tabs, cached metadata is attached immediately. Unsupported schemes (non-http/https) are skipped.
 
 ## License
 

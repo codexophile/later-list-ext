@@ -95,6 +95,43 @@ let metadataProcessing = false;
 
 const VIEW_URL = chrome.runtime.getURL('view.html');
 
+// Persistent metadata cache captured when tabs finish loading
+const METADATA_CACHE_KEY = 'metadataCache';
+const MAX_METADATA_CACHE_ENTRIES = 500;
+
+async function getMetadataCacheObject() {
+  try {
+    const obj = await chrome.storage.local.get(METADATA_CACHE_KEY);
+    return obj[METADATA_CACHE_KEY] || {};
+  } catch {
+    return {};
+  }
+}
+
+async function getMetadataFromCache(url) {
+  if (!url) return null;
+  const cache = await getMetadataCacheObject();
+  return cache[url] || null;
+}
+
+async function saveMetadataToCache(url, data) {
+  if (!url || !data) return;
+  const cache = await getMetadataCacheObject();
+  cache[url] = { ...data, capturedAt: Date.now() };
+
+  // Trim oldest entries if exceeding max size
+  const keys = Object.keys(cache);
+  if (keys.length > MAX_METADATA_CACHE_ENTRIES) {
+    keys.sort(
+      (a, b) => (cache[a].capturedAt || 0) - (cache[b].capturedAt || 0)
+    );
+    const excess = keys.length - MAX_METADATA_CACHE_ENTRIES;
+    for (let i = 0; i < excess; i++) delete cache[keys[i]];
+  }
+
+  await chrome.storage.local.set({ [METADATA_CACHE_KEY]: cache });
+}
+
 function getViewTabQueryPatterns() {
   return [VIEW_URL, `${VIEW_URL}#*`, `${VIEW_URL}?*`];
 }
@@ -154,6 +191,47 @@ async function getSettings() {
   const stored = await chrome.storage.local.get('laterlistSettings');
   return mergeSettings(stored.laterlistSettings || {});
 }
+
+// Capture metadata when tabs finish loading, so we have it even if tabs
+// get discarded/hibernated later
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+  try {
+    if (changeInfo.status !== 'complete') return;
+    const url = tab?.url || '';
+    if (!canExtractFromUrl(url)) return;
+    if (url.includes('view.html') || url.startsWith(VIEW_URL)) return;
+
+    const existing = await getMetadataFromCache(url);
+    if (
+      existing?.capturedAt &&
+      Date.now() - existing.capturedAt < 10 * 60 * 1000
+    ) {
+      // Cached recently; skip re-capturing
+      return;
+    }
+
+    const settings = await getSettings();
+    const rule = getActiveImageRule(settings, url);
+
+    // Prefer live extraction; fallback to fetch-based
+    let extracted = null;
+    if (!tab.discarded) {
+      try {
+        extracted = await extractFromTab(tabId, url, rule);
+      } catch (err) {
+        extracted = await extractFromUrl(url, rule);
+      }
+    } else {
+      extracted = await extractFromUrl(url, rule);
+    }
+
+    if (extracted) {
+      await saveMetadataToCache(url, extracted);
+    }
+  } catch (err) {
+    console.warn('[LaterList] onUpdated metadata capture failed:', err);
+  }
+});
 
 // Simple date formatter
 function formatContainerName(date, formatString) {
@@ -351,7 +429,19 @@ async function sendAllBrowserTabsToLaterList() {
         };
 
         const isHttp = canExtractFromUrl(tab.url);
-        if (!tab.discarded && isHttp) {
+        const cached = isHttp ? await getMetadataFromCache(tab.url) : null;
+        if (cached) {
+          if (cached.imageUrls?.length > 0) {
+            link.imageUrls = cached.imageUrls;
+            link.imageUrl = cached.imageUrl;
+          }
+          if (cached.publishedAt) link.publishedAt = cached.publishedAt;
+          if (cached.description) link.description = cached.description;
+          if (cached.summary) link.summary = cached.summary;
+          if (cached.keywords) link.keywords = cached.keywords;
+          link.metaStatus = 'done';
+          link.metaError = '';
+        } else if (!tab.discarded && isHttp) {
           // Live tab: mark for extraction, will do in parallel after loop
           link.metaStatus = 'processing';
           linksByTab.set(tab.id, { link, tabId: tab.id });
@@ -564,7 +654,19 @@ async function sendTabsAroundCurrentTab(direction) {
         };
 
         const isHttp = canExtractFromUrl(tab.url);
-        if (!tab.discarded && isHttp) {
+        const cached = isHttp ? await getMetadataFromCache(tab.url) : null;
+        if (cached) {
+          if (cached.imageUrls?.length > 0) {
+            link.imageUrls = cached.imageUrls;
+            link.imageUrl = cached.imageUrl;
+          }
+          if (cached.publishedAt) link.publishedAt = cached.publishedAt;
+          if (cached.description) link.description = cached.description;
+          if (cached.summary) link.summary = cached.summary;
+          if (cached.keywords) link.keywords = cached.keywords;
+          link.metaStatus = 'done';
+          link.metaError = '';
+        } else if (!tab.discarded && isHttp) {
           // Live tab: mark for extraction, will do in parallel after loop
           link.metaStatus = 'processing';
           linksByTab.set(tab.id, { link, tabId: tab.id });
@@ -872,6 +974,9 @@ async function isUrlSaved(url) {
 
 async function refreshTabActionState(tabId, url) {
   try {
+    // Check if tab still exists before updating
+    await chrome.tabs.get(tabId);
+    
     const saved = await isUrlSaved(url);
     const title = saved ? 'Saved in LaterList' : 'Save to LaterList';
     await chrome.action.setTitle({ tabId, title });
@@ -880,7 +985,10 @@ async function refreshTabActionState(tabId, url) {
       await chrome.action.setBadgeBackgroundColor({ tabId, color: '#2E7D32' });
     }
   } catch (err) {
-    console.warn('[LaterList] refreshTabActionState failed:', err);
+    // Silently ignore errors for closed tabs
+    if (!err?.message?.includes('No tab with id')) {
+      console.warn('[LaterList] refreshTabActionState failed:', err);
+    }
   }
 }
 

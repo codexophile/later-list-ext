@@ -988,6 +988,15 @@ function renameContainer(tabId, containerId, newName) {
   render();
 }
 
+function reverseContainerLinks(tabId, containerId) {
+  const tab = state.data.tabs.find(t => t.id === tabId);
+  const container = tab?.containers.find(c => c.id === containerId);
+  if (!container) return;
+  container.links.reverse();
+  persist();
+  render();
+}
+
 function editLink(tabId, containerId, linkId, title, url) {
   const tab = state.data.tabs.find(t => t.id === tabId);
   const container = tab?.containers.find(c => c.id === containerId);
@@ -1734,6 +1743,21 @@ function createContainerElement(containerData, tab) {
   });
   attachTooltip(trashAllBtn, 'Trash all', 'Move every link here to Trash');
 
+  const reverseBtn = createEl('button', {
+    className: 'container-action-btn',
+    html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64M3.51 15A9 9 0 0 0 18.36 18.36"/></svg>',
+    title: 'Reverse links',
+    onClick: e => {
+      e.stopPropagation();
+      reverseContainerLinks(tab.id, containerData.id);
+    },
+  });
+  attachTooltip(
+    reverseBtn,
+    'Reverse order',
+    'Reverse the order of all links in this container'
+  );
+
   const delContainerBtn = createEl('button', {
     className: 'container-action-btn container-delete-btn',
     html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
@@ -1751,6 +1775,7 @@ function createContainerElement(containerData, tab) {
 
   headerActions.appendChild(renameBtn);
   headerActions.appendChild(addLinkBtn);
+  headerActions.appendChild(reverseBtn);
   headerActions.appendChild(trashAllBtn);
   headerActions.appendChild(delContainerBtn);
   if (containerSelectWrapper) header.appendChild(containerSelectWrapper);

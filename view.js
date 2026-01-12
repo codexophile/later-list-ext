@@ -30,94 +30,6 @@ const sidebarDrag = {
   draggedElement: null,
 };
 
-// Virtual scroller for high-performance rendering of large link lists
-class VirtualScroller {
-  constructor(container, items, renderItem, options = {}) {
-    this.container = container;
-    this.items = items;
-    this.renderItem = renderItem;
-    this.itemHeight = options.itemHeight || 56; // Estimated height per link row
-    this.bufferSize = options.bufferSize || 5; // Extra items to render above/below viewport
-    this.visibleRange = { start: 0, end: 0 };
-
-    // Create viewport and inner container
-    this.viewport = document.createElement('div');
-    this.viewport.className = 'virtual-scroller-viewport';
-    this.viewport.style.overflowY = 'auto';
-    this.viewport.style.height = '100%';
-
-    this.innerContainer = document.createElement('div');
-    this.innerContainer.className = 'virtual-scroller-inner';
-
-    this.viewport.appendChild(this.innerContainer);
-    this.container.appendChild(this.viewport);
-
-    // Spacers for virtualizing
-    this.topSpacer = document.createElement('div');
-    this.bottomSpacer = document.createElement('div');
-    this.contentContainer = document.createElement('div');
-
-    this.innerContainer.appendChild(this.topSpacer);
-    this.innerContainer.appendChild(this.contentContainer);
-    this.innerContainer.appendChild(this.bottomSpacer);
-
-    this.viewport.addEventListener('scroll', () => this.onScroll());
-    this.render();
-  }
-
-  getVisibleRange() {
-    const scrollTop = this.viewport.scrollTop;
-    const viewportHeight = this.viewport.clientHeight;
-
-    let start = Math.floor(scrollTop / this.itemHeight) - this.bufferSize;
-    let end =
-      Math.ceil((scrollTop + viewportHeight) / this.itemHeight) +
-      this.bufferSize;
-
-    start = Math.max(0, start);
-    end = Math.min(this.items.length, end);
-
-    return { start, end };
-  }
-
-  onScroll() {
-    const newRange = this.getVisibleRange();
-    if (
-      newRange.start !== this.visibleRange.start ||
-      newRange.end !== this.visibleRange.end
-    ) {
-      this.visibleRange = newRange;
-      this.render();
-    }
-  }
-
-  render() {
-    const { start, end } = this.visibleRange;
-
-    // Update spacers
-    this.topSpacer.style.height = `${start * this.itemHeight}px`;
-    this.bottomSpacer.style.height = `${Math.max(
-      0,
-      (this.items.length - end) * this.itemHeight
-    )}px`;
-
-    // Clear and render visible items
-    this.contentContainer.innerHTML = '';
-    for (let i = start; i < end; i++) {
-      const item = this.items[i];
-      const element = this.renderItem(item, i);
-      this.contentContainer.appendChild(element);
-    }
-  }
-
-  updateItems(items) {
-    this.items = items;
-    this.visibleRange = { start: 0, end: 0 };
-    this.viewport.scrollTop = 0;
-    this.render();
-  }
-}
-
 const DEFAULT_URL_CLEANUP = {
   enabled: true,
   stripTrackingParams: true,
@@ -1721,6 +1633,146 @@ function createLinkRowElement(link, tab, container) {
   return linkRow;
 }
 
+// Helper function to create a container element for rendering
+function createContainerElement(containerData, tab) {
+  const containerEl = createEl('div', { className: 'container' });
+  containerEl.dataset.tabId = tab.id;
+  containerEl.dataset.containerId = containerData.id;
+  const header = createEl('div', { className: 'container-header' });
+  
+  // Bulk select checkbox in container header
+  let containerSelectWrapper = null;
+  if (state.bulkMode) {
+    containerSelectWrapper = createEl('div', {
+      className: 'container-stats',
+    });
+    const containerCheckbox = document.createElement('input');
+    containerCheckbox.type = 'checkbox';
+    // Determine if all links in container are selected
+    const allSelected =
+      containerData.links.length > 0 &&
+      containerData.links.every(l =>
+        isLinkSelected(tab.id, containerData.id, l.id)
+      );
+    const anySelected = containerData.links.some(l =>
+      isLinkSelected(tab.id, containerData.id, l.id)
+    );
+    containerCheckbox.checked = allSelected;
+    containerCheckbox.indeterminate = !allSelected && anySelected;
+    containerCheckbox.addEventListener('click', e => {
+      e.stopPropagation();
+      selectAllInContainer(tab.id, containerData.id, e.currentTarget.checked);
+      render();
+    });
+    containerSelectWrapper.appendChild(containerCheckbox);
+  }
+  
+  const nameEl = createEl('div', {
+    textContent: containerData.name,
+    className: 'container-name',
+    style: 'cursor: default; flex: 1;',
+  });
+  const stats = createEl('div', {
+    className: 'link-count',
+    textContent: `${containerData.links.length} links`,
+  });
+  const pendingMetaCount = containerData.links.filter(l =>
+    ['pending', 'processing'].includes(l.metaStatus)
+  ).length;
+  if (pendingMetaCount > 0) {
+    const metaStat = createEl('span', {
+      className: 'meta-progress-badge',
+      textContent: `${pendingMetaCount} meta pending`,
+    });
+    stats.appendChild(metaStat);
+  }
+  const headerActions = createEl('div', { className: 'container-actions' });
+
+  const renameBtn = createEl('button', {
+    className: 'container-action-btn',
+    html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
+    title: 'Rename container',
+    onClick: e => {
+      e.stopPropagation();
+      makeEditable(nameEl, newName =>
+        renameContainer(tab.id, containerData.id, newName)
+      );
+    },
+  });
+  attachTooltip(renameBtn, 'Rename container', 'Edit this container name');
+
+  const addLinkBtn = createEl('button', {
+    className: 'container-action-btn',
+    html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>',
+    title: 'Add link',
+    onClick: e => {
+      e.stopPropagation();
+      addLink(tab.id, containerData.id);
+    },
+  });
+  attachTooltip(addLinkBtn, 'Add link', 'Add a new link to this container');
+
+  const trashAllBtn = createEl('button', {
+    className: 'container-action-btn',
+    html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>',
+    title: 'Trash all links in this container',
+    onClick: e => {
+      e.stopPropagation();
+      if (containerData.links.length === 0) return;
+      if (
+        !confirm(
+          `Trash all ${containerData.links.length} links in "${containerData.name}"?`
+        )
+      )
+        return;
+      state.data.trash = state.data.trash || [];
+      state.data.trash.push(...containerData.links);
+      containerData.links = [];
+      persist();
+      render();
+    },
+  });
+  attachTooltip(trashAllBtn, 'Trash all', 'Move every link here to Trash');
+
+  const delContainerBtn = createEl('button', {
+    className: 'container-action-btn container-delete-btn',
+    html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
+    title: 'Delete container',
+    onClick: e => {
+      e.stopPropagation();
+      deleteContainer(tab.id, containerData.id);
+    },
+  });
+  attachTooltip(
+    delContainerBtn,
+    'Delete container',
+    'Move links to Trash and remove this container'
+  );
+
+  headerActions.appendChild(renameBtn);
+  headerActions.appendChild(addLinkBtn);
+  headerActions.appendChild(trashAllBtn);
+  headerActions.appendChild(delContainerBtn);
+  if (containerSelectWrapper) header.appendChild(containerSelectWrapper);
+  header.appendChild(nameEl);
+  header.appendChild(stats);
+  header.appendChild(headerActions);
+
+  const content = createEl('div', {
+    className: 'container-content',
+    attrs: { 'data-tab-id': tab.id, 'data-container-id': containerData.id },
+  });
+
+  containerData.links.forEach(link => {
+    const linkRow = createLinkRowElement(link, tab, containerData);
+    content.appendChild(linkRow);
+  });
+
+  containerEl.appendChild(header);
+  containerEl.appendChild(content);
+  return containerEl;
+}
+
 function renderActiveTab(container) {
   container.innerHTML = '';
 
@@ -1837,164 +1889,64 @@ function renderActiveTab(container) {
 
   const containersGrid = createEl('div', { className: 'containers' });
   containersGrid.dataset.tabId = tab.id;
-  tab.containers.forEach(containerData => {
-    const containerEl = createEl('div', { className: 'container' });
-    containerEl.dataset.tabId = tab.id;
-    containerEl.dataset.containerId = containerData.id;
-    const header = createEl('div', { className: 'container-header' });
-    // Bulk select checkbox in container header
-    let containerSelectWrapper = null;
-    if (state.bulkMode) {
-      containerSelectWrapper = createEl('div', {
-        className: 'container-stats',
-      });
-      const containerCheckbox = document.createElement('input');
-      containerCheckbox.type = 'checkbox';
-      // Determine if all links in container are selected
-      const allSelected =
-        containerData.links.length > 0 &&
-        containerData.links.every(l =>
-          isLinkSelected(tab.id, containerData.id, l.id)
-        );
-      const anySelected = containerData.links.some(l =>
-        isLinkSelected(tab.id, containerData.id, l.id)
-      );
-      containerCheckbox.checked = allSelected;
-      containerCheckbox.indeterminate = !allSelected && anySelected;
-      containerCheckbox.addEventListener('click', e => {
-        e.stopPropagation();
-        selectAllInContainer(tab.id, containerData.id, e.currentTarget.checked);
-        render();
-      });
-      containerSelectWrapper.appendChild(containerCheckbox);
+  container.appendChild(containersGrid); // Append basic structure
+  
+  // Use Lazy Loading for containers (better than Virtual Scrolling for variable height items)
+  // This renders containers in batches as you scroll down
+  const BATCH_SIZE = 20;
+  let nextContainerIndex = 0;
+  
+  function renderContainerBatch() {
+    const endIndex = Math.min(nextContainerIndex + BATCH_SIZE, tab.containers.length);
+    for (let i = nextContainerIndex; i < endIndex; i++) {
+      const containerData = tab.containers[i];
+      const containerEl = createContainerElement(containerData, tab);
+      containersGrid.appendChild(containerEl);
     }
-    const nameEl = createEl('div', {
-      textContent: containerData.name,
-      className: 'container-name',
-      style: 'cursor: default; flex: 1;',
-    });
-    const stats = createEl('div', {
-      className: 'link-count',
-      textContent: `${containerData.links.length} links`,
-    });
-    const pendingMetaCount = containerData.links.filter(l =>
-      ['pending', 'processing'].includes(l.metaStatus)
-    ).length;
-    if (pendingMetaCount > 0) {
-      const metaStat = createEl('span', {
-        className: 'meta-progress-badge',
-        textContent: `${pendingMetaCount} meta pending`,
-      });
-      stats.appendChild(metaStat);
+    nextContainerIndex = endIndex;
+    
+    // If there are more containers, setup the observer for the next batch
+    if (nextContainerIndex < tab.containers.length) {
+      setupBatchObserver();
     }
-    const headerActions = createEl('div', { className: 'container-actions' });
-
-    const renameBtn = createEl('button', {
-      className: 'container-action-btn',
-      html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>',
-      title: 'Rename container',
-      onClick: e => {
-        e.stopPropagation();
-        makeEditable(nameEl, newName =>
-          renameContainer(tab.id, containerData.id, newName)
-        );
-      },
-    });
-    attachTooltip(renameBtn, 'Rename container', 'Edit this container name');
-
-    const addLinkBtn = createEl('button', {
-      className: 'container-action-btn',
-      html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>',
-      title: 'Add link',
-      onClick: e => {
-        e.stopPropagation();
-        addLink(tab.id, containerData.id);
-      },
-    });
-    attachTooltip(addLinkBtn, 'Add link', 'Add a new link to this container');
-
-    const trashAllBtn = createEl('button', {
-      className: 'container-action-btn',
-      html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>',
-      title: 'Trash all links in this container',
-      onClick: e => {
-        e.stopPropagation();
-        if (containerData.links.length === 0) return;
-        if (
-          !confirm(
-            `Trash all ${containerData.links.length} links in "${containerData.name}"?`
-          )
-        )
-          return;
-        state.data.trash = state.data.trash || [];
-        state.data.trash.push(...containerData.links);
-        containerData.links = [];
-        persist();
-        render();
-      },
-    });
-    attachTooltip(trashAllBtn, 'Trash all', 'Move every link here to Trash');
-
-    const delContainerBtn = createEl('button', {
-      className: 'container-action-btn container-delete-btn',
-      html: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>',
-      title: 'Delete container',
-      onClick: e => {
-        e.stopPropagation();
-        deleteContainer(tab.id, containerData.id);
-      },
-    });
-    attachTooltip(
-      delContainerBtn,
-      'Delete container',
-      'Move links to Trash and remove this container'
-    );
-
-    headerActions.appendChild(renameBtn);
-    headerActions.appendChild(addLinkBtn);
-    headerActions.appendChild(trashAllBtn);
-    headerActions.appendChild(delContainerBtn);
-    if (containerSelectWrapper) header.appendChild(containerSelectWrapper);
-    header.appendChild(nameEl);
-    header.appendChild(stats);
-    header.appendChild(headerActions);
-
-    const content = createEl('div', {
-      className: 'container-content',
-      attrs: { 'data-tab-id': tab.id, 'data-container-id': containerData.id },
-    });
-
-    // Use virtual scrolling for containers with many links (>100)
-    const VIRTUAL_SCROLL_THRESHOLD = 100;
-    if (containerData.links.length > VIRTUAL_SCROLL_THRESHOLD) {
-      // Virtual scrolling version
-      const virtualContainer = createEl('div', {
-        className: 'virtual-scroller-container',
-        style: 'height: 600px; position: relative;',
-      });
-
-      new VirtualScroller(
-        virtualContainer,
-        containerData.links,
-        link => createLinkRowElement(link, tab, containerData),
-        { itemHeight: 56, bufferSize: 5 }
-      );
-
-      content.appendChild(virtualContainer);
-    } else {
-      // Regular rendering for small containers
-      containerData.links.forEach(link => {
-        const linkRow = createLinkRowElement(link, tab, containerData);
-        content.appendChild(linkRow);
-      });
+  }
+  
+  let loaderObserver = null;
+  let loaderEl = null;
+  
+  function setupBatchObserver() {
+    // Cleanup previous observer/loader
+    if (loaderObserver) {
+      loaderObserver.disconnect();
+      loaderObserver = null;
     }
-
-    containerEl.appendChild(header);
-    containerEl.appendChild(content);
-    containersGrid.appendChild(containerEl);
-  });
-
-  container.appendChild(containersGrid);
+    if (loaderEl) {
+      loaderEl.remove();
+      loaderEl = null;
+    }
+    
+    // Create sentinel element
+    loaderEl = createEl('div', { 
+      className: 'infinite-loader', 
+      textContent: 'Loading more containers...',
+      style: 'padding: 20px; text-align: center; color: var(--text-muted);'
+    });
+    containersGrid.appendChild(loaderEl);
+    
+    loaderObserver = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting) {
+        // Load next batch
+        if (loaderObserver) loaderObserver.disconnect();
+        if (loaderEl) loaderEl.remove();
+        renderContainerBatch();
+      }
+    }, { rootMargin: '200px' }); // Start loading before reaching bottom
+    
+    loaderObserver.observe(loaderEl);
+  }
+  
+  // Start initial render
+  renderContainerBatch();
 
   const addContainerBtn = createEl('button', {
     className: 'btn btn-primary',

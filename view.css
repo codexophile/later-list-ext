@@ -1787,52 +1787,6 @@ h1 {
   border: 2px dashed var(--accent);
   background: var(--accent-light);
 }
-/* Virtual Scroller Styles */
-.virtual-scroller-container {
-  position: relative;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg-secondary);
-  overflow: hidden;
-}
+/* Virtual Scroller Styles - REMOVED (Replaced by Lazy Loading) */
 
-.virtual-scroller-viewport {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border-hover) var(--bg-secondary);
-}
 
-.virtual-scroller-viewport::-webkit-scrollbar {
-  width: 8px;
-}
-
-.virtual-scroller-viewport::-webkit-scrollbar-track {
-  background: var(--bg-secondary);
-}
-
-.virtual-scroller-viewport::-webkit-scrollbar-thumb {
-  background: var(--border-hover);
-  border-radius: 4px;
-}
-
-.virtual-scroller-viewport::-webkit-scrollbar-thumb:hover {
-  background: var(--border);
-}
-
-.virtual-scroller-inner {
-  position: relative;
-  width: 100%;
-}
-
-.virtual-scroller-viewport .link {
-  margin: 0;
-  border-radius: 0;
-  border-bottom: 1px solid var(--border);
-}
-
-.virtual-scroller-viewport .link:last-child {
-  border-bottom: none;
-}

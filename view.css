@@ -1161,6 +1161,27 @@ h1 {
   border-color: var(--accent-hover);
 }
 
+.add-container-footer {
+  position: sticky;
+  bottom: 0;
+  padding: 16px;
+  background: linear-gradient(to top, var(--bg-secondary), transparent);
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  backdrop-filter: blur(10px);
+  z-index: 20;
+}
+
+.btn-add-container {
+  width: 100%;
+  max-width: 200px;
+  padding: 10px 20px;
+  font-size: 15px;
+  font-weight: 500;
+}
+
 .btn-secondary {
   background: var(--bg-secondary);
   border-color: var(--border);

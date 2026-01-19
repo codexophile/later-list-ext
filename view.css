@@ -729,6 +729,35 @@ h1 {
   font-weight: 500;
 }
 
+.status-overlay-iframes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.status-overlay-iframe-item {
+  display: flex;
+  align-items: center;
+  padding: 6px;
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px solid rgba(99, 102, 241, 0.2);
+  border-radius: 6px;
+  font-size: 11px;
+  word-break: break-all;
+}
+
+.status-overlay-iframe-item a {
+  color: var(--accent);
+  text-decoration: none;
+  transition: opacity 0.2s;
+}
+
+.status-overlay-iframe-item a:hover {
+  opacity: 0.8;
+  text-decoration: underline;
+}
+
 .status-overlay-image {
   width: 100%;
   height: auto;

@@ -358,6 +358,19 @@ function showStatusOverlay(linkData) {
     content += `</div>`;
   }
 
+  if (linkData.iframes && linkData.iframes.length > 0) {
+    content += `<div class="status-overlay-section">`;
+    content += `<div class="status-overlay-label">iFrames (${linkData.iframes.length})</div>`;
+    content += `<div class="status-overlay-iframes">`;
+    linkData.iframes.forEach(iframeUrl => {
+      content += `<div class="status-overlay-iframe-item">`;
+      content += `<a href="${escapeHtml(iframeUrl)}" target="_blank" title="${escapeHtml(iframeUrl)}">${escapeHtml(iframeUrl.length > 70 ? iframeUrl.substring(0, 67) + '...' : iframeUrl)}</a>`;
+      content += `</div>`;
+    });
+    content += `</div>`;
+    content += `</div>`;
+  }
+
   overlay.innerHTML = content;
 
   // Place the overlay near the cursor to avoid covering hovered content
@@ -521,6 +534,54 @@ function buildDetailContent(linkData) {
     content += `<div class="status-overlay-tags">`;
     linkData.keywords.forEach(kw => {
       content += `<span class="status-overlay-tag">${kw}</span>`;
+    });
+    content += `</div>`;
+    content += `</div>`;
+  }
+
+  if (linkData.author) {
+    content += `<div class="status-overlay-section">`;
+    content += `<div class="status-overlay-label">Author</div>`;
+    content += `<div class="status-overlay-value">${escapeHtml(linkData.author)}</div>`;
+    content += `</div>`;
+  }
+
+  if (linkData.siteName) {
+    content += `<div class="status-overlay-section">`;
+    content += `<div class="status-overlay-label">Site</div>`;
+    content += `<div class="status-overlay-value">${escapeHtml(linkData.siteName)}</div>`;
+    content += `</div>`;
+  }
+
+  if (linkData.type) {
+    content += `<div class="status-overlay-section">`;
+    content += `<div class="status-overlay-label">Type</div>`;
+    content += `<div class="status-overlay-value">${escapeHtml(linkData.type)}</div>`;
+    content += `</div>`;
+  }
+
+  if (linkData.locale) {
+    content += `<div class="status-overlay-section">`;
+    content += `<div class="status-overlay-label">Language</div>`;
+    content += `<div class="status-overlay-value">${escapeHtml(linkData.locale)}</div>`;
+    content += `</div>`;
+  }
+
+  if (linkData.canonical && linkData.canonical !== linkData.url) {
+    content += `<div class="status-overlay-section">`;
+    content += `<div class="status-overlay-label">Canonical URL</div>`;
+    content += `<div class="status-overlay-value"><a href="${linkData.canonical}" target="_blank">${linkData.canonical}</a></div>`;
+    content += `</div>`;
+  }
+
+  if (linkData.iframes && linkData.iframes.length > 0) {
+    content += `<div class="status-overlay-section">`;
+    content += `<div class="status-overlay-label">iFrames (${linkData.iframes.length})</div>`;
+    content += `<div class="status-overlay-iframes">`;
+    linkData.iframes.forEach(iframeUrl => {
+      content += `<div class="status-overlay-iframe-item">`;
+      content += `<a href="${escapeHtml(iframeUrl)}" target="_blank" title="${escapeHtml(iframeUrl)}">${escapeHtml(iframeUrl.length > 70 ? iframeUrl.substring(0, 67) + '...' : iframeUrl)}</a>`;
+      content += `</div>`;
     });
     content += `</div>`;
     content += `</div>`;
@@ -1685,7 +1746,15 @@ function createLinkRowElement(link, tab, container) {
       locked: link.locked,
       imageUrl: link.imageUrl,
       imageUrls: link.imageUrls,
-      type: 'regular',
+      author: link.author,
+      siteName: link.siteName,
+      canonical: link.canonical,
+      type: link.type,
+      locale: link.locale,
+      description: link.description,
+      summary: link.summary,
+      keywords: link.keywords,
+      iframes: link.iframes,
     });
   });
   linkRow.addEventListener('mouseleave', () => {
@@ -1987,7 +2056,15 @@ function renderActiveTab(container) {
             deletedAt: link.deletedAt,
             imageUrl: link.imageUrl,
             imageUrls: link.imageUrls,
-            type: 'trash',
+            author: link.author,
+            siteName: link.siteName,
+            canonical: link.canonical,
+            type: link.type,
+            locale: link.locale,
+            description: link.description,
+            summary: link.summary,
+            keywords: link.keywords,
+            iframes: link.iframes,
           });
         });
         linkRow.addEventListener('mouseleave', () => {
@@ -2680,7 +2757,15 @@ function renderDuplicates(container, duplicateGroups) {
             containerName: linkRef.containerName,
             imageUrl: linkRef.imageUrl,
             imageUrls: linkRef.imageUrls,
-            type: 'duplicate',
+            author: linkRef.author,
+            siteName: linkRef.siteName,
+            canonical: linkRef.canonical,
+            type: linkRef.type,
+            locale: linkRef.locale,
+            description: linkRef.description,
+            summary: linkRef.summary,
+            keywords: linkRef.keywords,
+            iframes: linkRef.iframes,
           });
         });
         linkRow.addEventListener('mouseleave', () => {

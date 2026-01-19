@@ -73,6 +73,12 @@ async function extractPreview(tabId) {
         summary: result.extracted.summary || null,
         publishedAt: result.extracted.publishedAt || null,
         keywords: result.extracted.keywords || null,
+        author: result.extracted.author || null,
+        siteName: result.extracted.siteName || null,
+        type: result.extracted.type || null,
+        locale: result.extracted.locale || null,
+        iframes: result.extracted.iframes || [],
+        canonical: result.extracted.canonical || null,
       };
       // Reset selected images - select ALL by default
       selectedImageUrls = [...(result.extracted.imageUrls || [])];
@@ -206,6 +212,43 @@ function renderPreview() {
       summaryEl.appendChild(summaryText);
     }
 
+    // iFrames
+    if (previewData.iframes && previewData.iframes.length > 0) {
+      const iframesDiv = document.createElement('div');
+      iframesDiv.className = 'preview-iframes';
+
+      const iframesLabel = document.createElement('div');
+      iframesLabel.className = 'preview-iframes-label';
+      iframesLabel.textContent = `📺 Embedded iFrames (${previewData.iframes.length})`;
+      iframesDiv.appendChild(iframesLabel);
+
+      const iframesList = document.createElement('div');
+      iframesList.className = 'preview-iframes-list';
+
+      previewData.iframes.slice(0, 5).forEach(url => {
+        const item = document.createElement('div');
+        item.className = 'preview-iframe-item';
+        const link = document.createElement('a');
+        link.href = url;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.textContent = url.length > 50 ? url.substring(0, 47) + '...' : url;
+        link.title = url;
+        item.appendChild(link);
+        iframesList.appendChild(item);
+      });
+
+      if (previewData.iframes.length > 5) {
+        const more = document.createElement('div');
+        more.className = 'preview-iframes-more';
+        more.textContent = `+${previewData.iframes.length - 5} more`;
+        iframesList.appendChild(more);
+      }
+
+      iframesDiv.appendChild(iframesList);
+      summaryEl.appendChild(iframesDiv);
+    }
+
     // Show/hide section
     if (summaryEl.children.length > 0) {
       summaryEl.style.display = 'block';
@@ -296,6 +339,14 @@ async function saveToSelection({ closeTabAfterSave }) {
     let description = null;
     let summary = null;
     let keywords = null;
+    let author = previewData?.author || null;
+    let siteName = previewData?.siteName || null;
+    let canonical = previewData?.canonical || null;
+    let type = previewData?.type || null;
+    let locale = previewData?.locale || null;
+    let iframes = Array.isArray(previewData?.iframes)
+      ? previewData.iframes
+      : null;
     if (typeof currentPage.tabId === 'number') {
       try {
         const metaResults = await chrome.scripting.executeScript({
@@ -435,11 +486,82 @@ async function saveToSelection({ closeTabAfterSave }) {
               return keywords.length > 0 ? keywords : null;
             };
 
+            const extractAuthor = () => {
+              const authorMeta = document.querySelector(
+                'meta[name="author"], meta[property="article:author"], meta[property="og:author"], meta[name="parsely-author"]',
+              );
+              if (authorMeta?.content) return authorMeta.content.trim();
+
+              const jsonLd = extractJsonLd();
+              if (jsonLd?.author) {
+                if (typeof jsonLd.author === 'string')
+                  return jsonLd.author.trim();
+                if (jsonLd.author?.name) return jsonLd.author.name.trim();
+              }
+              return null;
+            };
+
+            const extractSiteName = () => {
+              const siteMeta = document.querySelector(
+                'meta[property="og:site_name"]',
+              );
+              if (siteMeta?.content) return siteMeta.content.trim();
+              return null;
+            };
+
+            const extractCanonical = () => {
+              const canonicalLink = document.querySelector(
+                'link[rel="canonical"]',
+              );
+              if (canonicalLink?.href) return canonicalLink.href.trim();
+              const ogUrl = document.querySelector('meta[property="og:url"]');
+              if (ogUrl?.content) return ogUrl.content.trim();
+              return null;
+            };
+
+            const extractType = () => {
+              const typeMeta = document.querySelector(
+                'meta[property="og:type"]',
+              );
+              if (typeMeta?.content) return typeMeta.content.trim();
+              return null;
+            };
+
+            const extractLocale = () => {
+              const localeMeta = document.querySelector(
+                'meta[property="og:locale"]',
+              );
+              if (localeMeta?.content) return localeMeta.content.trim();
+              return null;
+            };
+
+            const extractIframes = () => {
+              const iframeNodes = document.querySelectorAll('iframe');
+              const iframeUrls = [];
+              iframeNodes.forEach(iframe => {
+                const src = iframe.getAttribute('src');
+                if (src && src.trim()) {
+                  try {
+                    const absoluteSrc = new URL(src, document.baseURI).href;
+                    if (!iframeUrls.includes(absoluteSrc))
+                      iframeUrls.push(absoluteSrc);
+                  } catch {}
+                }
+              });
+              return iframeUrls.length > 0 ? iframeUrls : null;
+            };
+
             return {
               publishedAt: extractPublishedDate(),
               description: extractDescription(),
               summary: extractSummary(),
               keywords: extractKeywords(),
+              author: extractAuthor(),
+              siteName: extractSiteName(),
+              canonical: extractCanonical(),
+              type: extractType(),
+              locale: extractLocale(),
+              iframes: extractIframes(),
             };
           },
         });
@@ -449,6 +571,12 @@ async function saveToSelection({ closeTabAfterSave }) {
         description = meta.description;
         summary = meta.summary;
         keywords = meta.keywords;
+        author = meta.author || author;
+        siteName = meta.siteName || siteName;
+        canonical = meta.canonical || canonical;
+        type = meta.type || type;
+        locale = meta.locale || locale;
+        if (Array.isArray(meta.iframes)) iframes = meta.iframes;
         console.log('[LaterList] Extracted metadata:', meta);
       } catch (error) {
         console.log('[LaterList] Metadata extraction failed:', error);
@@ -475,6 +603,12 @@ async function saveToSelection({ closeTabAfterSave }) {
         description,
         summary,
         keywords,
+        author,
+        siteName,
+        canonical,
+        type,
+        locale,
+        iframes,
       },
     });
 

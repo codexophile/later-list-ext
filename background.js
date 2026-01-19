@@ -313,11 +313,7 @@ function copyMetadataToLink(extracted, link) {
   if (extracted.canonical) link.canonical = extracted.canonical;
   if (extracted.type) link.type = extracted.type;
   if (extracted.locale) link.locale = extracted.locale;
-  if (extracted.author) link.author = extracted.author;
-  if (extracted.siteName) link.siteName = extracted.siteName;
-  if (extracted.canonical) link.canonical = extracted.canonical;
-  if (extracted.type) link.type = extracted.type;
-  if (extracted.locale) link.locale = extracted.locale;
+  if (extracted.iframes) link.iframes = extracted.iframes;
 }
 
 function findLinkByIds(data, tabId, containerId, linkId) {
@@ -376,6 +372,7 @@ async function processMetadataQueue() {
         if (extracted.canonical) link.canonical = extracted.canonical;
         if (extracted.type) link.type = extracted.type;
         if (extracted.locale) link.locale = extracted.locale;
+        if (extracted.iframes) link.iframes = extracted.iframes;
 
         link.metaStatus = 'done';
         link.metaError = '';
@@ -488,6 +485,7 @@ async function sendAllBrowserTabsToLaterList() {
           if (cached.canonical) link.canonical = cached.canonical;
           if (cached.type) link.type = cached.type;
           if (cached.locale) link.locale = cached.locale;
+          if (cached.iframes) link.iframes = cached.iframes;
           link.metaStatus = 'done';
           link.metaError = '';
         } else if (!tab.discarded && isHttp) {
@@ -540,6 +538,7 @@ async function sendAllBrowserTabsToLaterList() {
             if (extracted.canonical) link.canonical = extracted.canonical;
             if (extracted.type) link.type = extracted.type;
             if (extracted.locale) link.locale = extracted.locale;
+            if (extracted.iframes) link.iframes = extracted.iframes;
             link.metaStatus = 'done';
             link.metaError = '';
           } catch (err) {
@@ -723,6 +722,7 @@ async function sendTabsAroundCurrentTab(direction) {
           if (cached.canonical) link.canonical = cached.canonical;
           if (cached.type) link.type = cached.type;
           if (cached.locale) link.locale = cached.locale;
+          if (cached.iframes) link.iframes = cached.iframes;
           link.metaStatus = 'done';
           link.metaError = '';
         } else if (!tab.discarded && isHttp) {
@@ -775,6 +775,7 @@ async function sendTabsAroundCurrentTab(direction) {
             if (extracted.canonical) link.canonical = extracted.canonical;
             if (extracted.type) link.type = extracted.type;
             if (extracted.locale) link.locale = extracted.locale;
+            if (extracted.iframes) link.iframes = extracted.iframes;
             link.metaStatus = 'done';
             link.metaError = '';
           } catch (err) {
@@ -862,6 +863,12 @@ async function addLink({
   description,
   summary,
   keywords,
+  author,
+  siteName,
+  canonical,
+  type,
+  locale,
+  iframes,
 }) {
   console.log('[LaterList Background] addLink called with:', {
     url,
@@ -874,6 +881,12 @@ async function addLink({
     description,
     summary,
     keywords,
+    author,
+    siteName,
+    canonical,
+    type,
+    locale,
+    iframes,
   });
 
   const data = await getData();
@@ -912,6 +925,12 @@ async function addLink({
     'description',
     'summary',
     'keywords',
+    'author',
+    'siteName',
+    'canonical',
+    'type',
+    'locale',
+    'iframes',
   ];
   try {
     extra.forEach(key => {
@@ -1223,6 +1242,7 @@ async function extractFromHtml(html, url, rule = { allow: [], deny: [] }) {
     canonical: null,
     type: null,
     locale: null,
+    iframes: [],
   };
 
   try {
@@ -1469,6 +1489,22 @@ async function extractFromHtml(html, url, rule = { allow: [], deny: [] }) {
         }
       }
     }
+
+    // iframes
+    const iframes = doc.querySelectorAll('iframe');
+    const iframeUrls = [];
+    iframes.forEach(iframe => {
+      const src = iframe.getAttribute('src');
+      if (src && src.trim()) {
+        const absoluteSrc = absolutizeUrl(src, url);
+        if (absoluteSrc && !iframeUrls.includes(absoluteSrc)) {
+          iframeUrls.push(absoluteSrc);
+        }
+      }
+    });
+    if (iframeUrls.length > 0) {
+      result.iframes = iframeUrls;
+    }
   } catch (err) {
     console.warn('[LaterList] HTML extraction failed:', err);
   }
@@ -1501,6 +1537,7 @@ async function extractFromTab(tabId, pageUrl, rule = { allow: [], deny: [] }) {
     canonical: null,
     type: null,
     locale: null,
+    iframes: [],
   };
 
   try {
@@ -1848,6 +1885,26 @@ async function extractFromTab(tabId, pageUrl, rule = { allow: [], deny: [] }) {
           return null;
         };
 
+        const extractIframes = () => {
+          const iframes = document.querySelectorAll('iframe');
+          const iframeUrls = [];
+          iframes.forEach(iframe => {
+            const src = iframe.getAttribute('src');
+            if (src && src.trim()) {
+              try {
+                // Convert to absolute URL
+                const absoluteSrc = new URL(src, document.baseURI).href;
+                if (!iframeUrls.includes(absoluteSrc)) {
+                  iframeUrls.push(absoluteSrc);
+                }
+              } catch (e) {
+                // Ignore invalid URLs
+              }
+            }
+          });
+          return iframeUrls.length > 0 ? iframeUrls : null;
+        };
+
         return {
           publishedAt: extractPublishedDate(),
           description: extractDescription(),
@@ -1858,6 +1915,7 @@ async function extractFromTab(tabId, pageUrl, rule = { allow: [], deny: [] }) {
           canonical: extractCanonical(),
           type: extractType(),
           locale: extractLocale(),
+          iframes: extractIframes(),
         };
       },
     });
@@ -1870,6 +1928,9 @@ async function extractFromTab(tabId, pageUrl, rule = { allow: [], deny: [] }) {
     result.author = meta.author;
     result.siteName = meta.siteName;
     result.canonical = meta.canonical;
+    result.type = meta.type;
+    result.locale = meta.locale;
+    result.iframes = meta.iframes || [];
     result.type = meta.type;
     result.locale = meta.locale;
   } catch (err) {

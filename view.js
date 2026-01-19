@@ -1980,7 +1980,9 @@ function renderActiveTab(container) {
   renderContainerBatch();
 
   // Add container button in sticky footer
-  const addContainerFooter = createEl('div', { className: 'add-container-footer' });
+  const addContainerFooter = createEl('div', {
+    className: 'add-container-footer',
+  });
   const addContainerBtn = createEl('button', {
     className: 'btn btn-primary btn-add-container',
     textContent: '+ Container',

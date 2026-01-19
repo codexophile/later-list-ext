@@ -52,7 +52,7 @@ function getActiveImageRule(settings, url) {
       console.warn(
         '[LaterList] Invalid image rule pattern:',
         rule.pattern,
-        err
+        err,
       );
     }
   }
@@ -97,7 +97,7 @@ const VIEW_URL = chrome.runtime.getURL('view.html');
 
 // Persistent metadata cache captured when tabs finish loading
 const METADATA_CACHE_KEY = 'metadataCache';
-const MAX_METADATA_CACHE_ENTRIES = 500;
+const MAX_METADATA_CACHE_ENTRIES = 100;
 
 async function getMetadataCacheObject() {
   try {
@@ -116,20 +116,38 @@ async function getMetadataFromCache(url) {
 
 async function saveMetadataToCache(url, data) {
   if (!url || !data) return;
-  const cache = await getMetadataCacheObject();
-  cache[url] = { ...data, capturedAt: Date.now() };
+  try {
+    const cache = await getMetadataCacheObject();
+    cache[url] = { ...data, capturedAt: Date.now() };
 
-  // Trim oldest entries if exceeding max size
-  const keys = Object.keys(cache);
-  if (keys.length > MAX_METADATA_CACHE_ENTRIES) {
-    keys.sort(
-      (a, b) => (cache[a].capturedAt || 0) - (cache[b].capturedAt || 0)
-    );
-    const excess = keys.length - MAX_METADATA_CACHE_ENTRIES;
-    for (let i = 0; i < excess; i++) delete cache[keys[i]];
+    // Trim oldest entries if exceeding max size
+    const keys = Object.keys(cache);
+    if (keys.length > MAX_METADATA_CACHE_ENTRIES) {
+      keys.sort(
+        (a, b) => (cache[a].capturedAt || 0) - (cache[b].capturedAt || 0),
+      );
+      const excess = keys.length - MAX_METADATA_CACHE_ENTRIES;
+      for (let i = 0; i < excess; i++) delete cache[keys[i]];
+    }
+
+    await chrome.storage.local.set({ [METADATA_CACHE_KEY]: cache });
+  } catch (err) {
+    if (err.message && err.message.includes('quota')) {
+      console.warn('[LaterList] Quota exceeded, clearing old metadata cache');
+      // Clear cache and try saving just this one entry
+      try {
+        const freshCache = { [url]: { ...data, capturedAt: Date.now() } };
+        await chrome.storage.local.set({ [METADATA_CACHE_KEY]: freshCache });
+      } catch (retryErr) {
+        console.error(
+          '[LaterList] Cannot save metadata even after clearing cache:',
+          retryErr,
+        );
+      }
+    } else {
+      throw err;
+    }
   }
-
-  await chrome.storage.local.set({ [METADATA_CACHE_KEY]: cache });
 }
 
 function getViewTabQueryPatterns() {
@@ -401,7 +419,7 @@ async function sendAllBrowserTabsToLaterList() {
     // Create new container with formatted name
     const containerName = formatContainerName(
       new Date(),
-      settings.containerNameFormat
+      settings.containerNameFormat,
     );
     const newContainer = {
       id: `container-${Date.now()}`,
@@ -492,7 +510,7 @@ async function sendAllBrowserTabsToLaterList() {
             link.metaStatus = 'failed';
             link.metaError = err?.message || 'Metadata extraction failed';
           }
-        }
+        },
       );
 
       // Wait for all live extractions in parallel (with timeout safety)
@@ -512,7 +530,7 @@ async function sendAllBrowserTabsToLaterList() {
       try {
         console.log(
           `[LaterList] Closing ${savedTabIds.length} tabs, IDs:`,
-          savedTabIds
+          savedTabIds,
         );
         await chrome.tabs.remove(savedTabIds);
         console.log('[LaterList] Tabs closed successfully');
@@ -626,7 +644,7 @@ async function sendTabsAroundCurrentTab(direction) {
     // Create new container with formatted name
     const containerName = formatContainerName(
       new Date(),
-      settings.containerNameFormat
+      settings.containerNameFormat,
     );
     const newContainer = {
       id: `container-${Date.now()}`,
@@ -717,7 +735,7 @@ async function sendTabsAroundCurrentTab(direction) {
             link.metaStatus = 'failed';
             link.metaError = err?.message || 'Metadata extraction failed';
           }
-        }
+        },
       );
 
       // Wait for all live extractions in parallel (with timeout safety)
@@ -1003,7 +1021,7 @@ function extractImageFromHtml(html, pageUrl) {
   const findAttr = (tag, attr) => {
     const re = new RegExp(
       `${attr}\\s*=\\s*"([^"]+)"|${attr}\\s*=\\s*'([^']+)'`,
-      'i'
+      'i',
     );
     const m = tag.match(re);
     return decodeBasicEntities(m?.[1] || m?.[2] || '');
@@ -1051,7 +1069,7 @@ async function fetchImageForPage(url) {
     console.warn(
       '[LaterList Background] fetchImageForPage failed for',
       url,
-      err
+      err,
     );
   }
   return [];
@@ -1255,7 +1273,7 @@ async function extractFromHtml(html, url, rule = { allow: [], deny: [] }) {
     // Extract metadata
     const extractJsonLd = () => {
       const scripts = doc.querySelectorAll(
-        'script[type="application/ld+json"]'
+        'script[type="application/ld+json"]',
       );
       for (const script of scripts) {
         try {
@@ -1405,7 +1423,7 @@ async function extractFromTab(tabId, pageUrl, rule = { allow: [], deny: [] }) {
             img.onload = () => {
               clearTimeout(timer);
               resolve(
-                img.naturalWidth >= MIN_DIM && img.naturalHeight >= MIN_DIM
+                img.naturalWidth >= MIN_DIM && img.naturalHeight >= MIN_DIM,
               );
             };
             img.onerror = () => {
@@ -1524,7 +1542,7 @@ async function extractFromTab(tabId, pageUrl, rule = { allow: [], deny: [] }) {
           return isValid ? url : null;
         });
         const validatedMeta = (await Promise.all(validationPromises)).filter(
-          Boolean
+          Boolean,
         );
         validatedMeta.forEach(v => seen.add(v));
 
@@ -1569,7 +1587,7 @@ async function extractFromTab(tabId, pageUrl, rule = { allow: [], deny: [] }) {
       func: () => {
         const extractJsonLd = () => {
           const scripts = document.querySelectorAll(
-            'script[type="application/ld+json"]'
+            'script[type="application/ld+json"]',
           );
           for (const script of scripts) {
             try {
@@ -1674,7 +1692,7 @@ async function extractFromTab(tabId, pageUrl, rule = { allow: [], deny: [] }) {
             });
           }
           const metaTags = document.querySelectorAll(
-            'meta[property="article:tag"]'
+            'meta[property="article:tag"]',
           );
           metaTags.forEach(tag => {
             const content = tag.getAttribute('content');
@@ -1793,7 +1811,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const extracted = await extractFromTab(
           message.tabId,
           message.url,
-          rule
+          rule,
         );
         sendResponse({ extracted });
       } catch (err) {

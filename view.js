@@ -135,6 +135,12 @@ let statusOverlay = null;
 let imageViewerOverlay = null;
 let imageViewerState = { images: [], index: 0, link: null };
 let detailOverlay = null;
+let lastMousePos = { x: null, y: null };
+
+// Track pointer location so we can place the status overlay away from the mouse
+document.addEventListener('mousemove', e => {
+  lastMousePos = { x: e.clientX, y: e.clientY };
+});
 
 function createStatusOverlay() {
   if (statusOverlay) return statusOverlay;
@@ -143,6 +149,45 @@ function createStatusOverlay() {
   statusOverlay.style.display = 'none';
   document.body.appendChild(statusOverlay);
   return statusOverlay;
+}
+
+function positionStatusOverlay(overlay) {
+  // Default to CSS bottom-right
+  overlay.style.top = '';
+  overlay.style.left = '';
+  overlay.style.bottom = '20px';
+  overlay.style.right = '20px';
+
+  if (lastMousePos.x === null || lastMousePos.y === null) return;
+
+  const margin = 14;
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+
+  // Temporarily show (hidden) to measure size
+  const prevDisplay = overlay.style.display;
+  const prevVisibility = overlay.style.visibility;
+  overlay.style.visibility = 'hidden';
+  overlay.style.display = 'block';
+  const rect = overlay.getBoundingClientRect();
+
+  let top = lastMousePos.y + margin;
+  let left = lastMousePos.x + margin;
+
+  if (left + rect.width + margin > vw) {
+    left = Math.max(margin, lastMousePos.x - rect.width - margin);
+  }
+  if (top + rect.height + margin > vh) {
+    top = Math.max(margin, lastMousePos.y - rect.height - margin);
+  }
+
+  overlay.style.top = `${top}px`;
+  overlay.style.left = `${left}px`;
+  overlay.style.bottom = '';
+  overlay.style.right = '';
+
+  overlay.style.display = prevDisplay || 'block';
+  overlay.style.visibility = prevVisibility || '';
 }
 
 function showStatusOverlay(linkData) {
@@ -171,8 +216,8 @@ function showStatusOverlay(linkData) {
     linkData.imageUrls && linkData.imageUrls.length > 0
       ? linkData.imageUrls
       : linkData.imageUrl
-      ? [linkData.imageUrl]
-      : [];
+        ? [linkData.imageUrl]
+        : [];
 
   if (images.length > 0) {
     content += `<div class="status-overlay-gallery">`;
@@ -207,10 +252,10 @@ function showStatusOverlay(linkData) {
     content += `<div class="status-overlay-section">`;
     content += `<div class="status-overlay-label">Added</div>`;
     content += `<div class="status-overlay-value">${formatDate(
-      linkData.savedAt
+      linkData.savedAt,
     )}</div>`;
     content += `<div class="status-overlay-relative">${formatRelativeTime(
-      linkData.savedAt
+      linkData.savedAt,
     )}</div>`;
     content += `</div>`;
   }
@@ -219,10 +264,10 @@ function showStatusOverlay(linkData) {
     content += `<div class="status-overlay-section">`;
     content += `<div class="status-overlay-label">Deleted</div>`;
     content += `<div class="status-overlay-value">${formatDate(
-      linkData.deletedAt
+      linkData.deletedAt,
     )}</div>`;
     content += `<div class="status-overlay-relative">${formatRelativeTime(
-      linkData.deletedAt
+      linkData.deletedAt,
     )}</div>`;
     content += `</div>`;
   }
@@ -241,6 +286,12 @@ function showStatusOverlay(linkData) {
   }
 
   overlay.innerHTML = content;
+
+  // Place the overlay near the cursor to avoid covering hovered content
+  overlay.style.visibility = 'hidden';
+  overlay.style.display = 'block';
+  positionStatusOverlay(overlay);
+  overlay.style.visibility = '';
 
   // Attach gallery handlers if multiple images
   if (images.length > 1) {
@@ -350,10 +401,10 @@ function buildDetailContent(linkData) {
     content += `<div class="status-overlay-section">`;
     content += `<div class="status-overlay-label">Published</div>`;
     content += `<div class="status-overlay-value">${formatDate(
-      linkData.publishedAt
+      linkData.publishedAt,
     )}</div>`;
     content += `<div class="status-overlay-relative">${formatRelativeTime(
-      linkData.publishedAt
+      linkData.publishedAt,
     )}</div>`;
     content += `</div>`;
   }
@@ -362,10 +413,10 @@ function buildDetailContent(linkData) {
     content += `<div class="status-overlay-section">`;
     content += `<div class="status-overlay-label">Added</div>`;
     content += `<div class="status-overlay-value">${formatDate(
-      linkData.savedAt
+      linkData.savedAt,
     )}</div>`;
     content += `<div class="status-overlay-relative">${formatRelativeTime(
-      linkData.savedAt
+      linkData.savedAt,
     )}</div>`;
     content += `</div>`;
   }
@@ -374,10 +425,10 @@ function buildDetailContent(linkData) {
     content += `<div class="status-overlay-section">`;
     content += `<div class="status-overlay-label">Deleted</div>`;
     content += `<div class="status-overlay-value">${formatDate(
-      linkData.deletedAt
+      linkData.deletedAt,
     )}</div>`;
     content += `<div class="status-overlay-relative">${formatRelativeTime(
-      linkData.deletedAt
+      linkData.deletedAt,
     )}</div>`;
     content += `</div>`;
   }
@@ -506,8 +557,8 @@ function getLinkImages(linkData) {
   return linkData.imageUrls && linkData.imageUrls.length > 0
     ? linkData.imageUrls
     : linkData.imageUrl
-    ? [linkData.imageUrl]
-    : [];
+      ? [linkData.imageUrl]
+      : [];
 }
 
 function renderImageViewer(index) {
@@ -650,7 +701,7 @@ function migrateAndFixData(data) {
       const nextContainerId = allocateUniqueId(
         container.id,
         'container',
-        usedContainerIds
+        usedContainerIds,
       );
       if (container.id !== nextContainerId) {
         container.id = nextContainerId;
@@ -1043,7 +1094,7 @@ function selectAllInContainer(tabId, containerId, selected) {
   const container = tab?.containers.find(c => c.id === containerId);
   if (!container) return;
   container.links.forEach(l =>
-    setLinkSelected(tabId, containerId, l.id, selected)
+    setLinkSelected(tabId, containerId, l.id, selected),
   );
 }
 
@@ -1133,7 +1184,7 @@ function bulkMoveSelected() {
   showMoveModal((targetTabId, targetContainerId) => {
     const targetTab = state.data.tabs.find(t => t.id === targetTabId);
     const targetContainer = targetTab?.containers.find(
-      c => c.id === targetContainerId
+      c => c.id === targetContainerId,
     );
     if (!targetContainer) return;
 
@@ -1220,7 +1271,7 @@ function makeEditable(el, onSave) {
       if (newVal) onSave(newVal);
       render();
     },
-    { once: true }
+    { once: true },
   );
   el.addEventListener(
     'keydown',
@@ -1234,7 +1285,7 @@ function makeEditable(el, onSave) {
         render();
       }
     },
-    { once: true }
+    { once: true },
   );
   el.focus();
   document.execCommand('selectAll', false, null);
@@ -1302,7 +1353,7 @@ function renderTabs(container) {
     attachTooltip(
       removeBtn,
       'Delete tab',
-      'Move all links to trash and remove this tab'
+      'Move all links to trash and remove this tab',
     );
 
     tabEl.appendChild(tabName);
@@ -1523,12 +1574,12 @@ function createLinkRowElement(link, tab, container) {
         meta === 'pending'
           ? 'Meta pending'
           : meta === 'processing'
-          ? 'Meta…'
-          : meta === 'failed'
-          ? 'Meta failed'
-          : meta === 'skipped'
-          ? 'Meta skipped'
-          : 'Meta',
+            ? 'Meta…'
+            : meta === 'failed'
+              ? 'Meta failed'
+              : meta === 'skipped'
+                ? 'Meta skipped'
+                : 'Meta',
       title: link.metaError || '',
     });
     linkInfo.appendChild(metaBadge);
@@ -1537,8 +1588,8 @@ function createLinkRowElement(link, tab, container) {
   const imgCount = Array.isArray(link.imageUrls)
     ? link.imageUrls.length
     : link.imageUrl
-    ? 1
-    : 0;
+      ? 1
+      : 0;
   if (imgCount > 0) {
     const imageBadge = createEl('span', {
       className: 'link-badge image-badge',
@@ -1591,7 +1642,7 @@ function createLinkRowElement(link, tab, container) {
     link.locked ? 'Unlock link' : 'Lock link',
     link.locked
       ? 'Link is locked. Click to unlock.'
-      : 'Protect link from being trashed when opened'
+      : 'Protect link from being trashed when opened',
   );
   actions.appendChild(lockBtn);
 
@@ -1618,7 +1669,7 @@ function createLinkRowElement(link, tab, container) {
   attachTooltip(
     detailsBtn,
     'View details',
-    'Open full overlay with images and metadata'
+    'Open full overlay with images and metadata',
   );
   actions.appendChild(detailsBtn);
   linkRow.appendChild(favicon);
@@ -1661,10 +1712,10 @@ function createContainerElement(containerData, tab) {
     const allSelected =
       containerData.links.length > 0 &&
       containerData.links.every(l =>
-        isLinkSelected(tab.id, containerData.id, l.id)
+        isLinkSelected(tab.id, containerData.id, l.id),
       );
     const anySelected = containerData.links.some(l =>
-      isLinkSelected(tab.id, containerData.id, l.id)
+      isLinkSelected(tab.id, containerData.id, l.id),
     );
     containerCheckbox.checked = allSelected;
     containerCheckbox.indeterminate = !allSelected && anySelected;
@@ -1686,7 +1737,7 @@ function createContainerElement(containerData, tab) {
     textContent: `${containerData.links.length} links`,
   });
   const pendingMetaCount = containerData.links.filter(l =>
-    ['pending', 'processing'].includes(l.metaStatus)
+    ['pending', 'processing'].includes(l.metaStatus),
   ).length;
   if (pendingMetaCount > 0) {
     const metaStat = createEl('span', {
@@ -1704,7 +1755,7 @@ function createContainerElement(containerData, tab) {
     onClick: e => {
       e.stopPropagation();
       makeEditable(nameEl, newName =>
-        renameContainer(tab.id, containerData.id, newName)
+        renameContainer(tab.id, containerData.id, newName),
       );
     },
   });
@@ -1730,7 +1781,7 @@ function createContainerElement(containerData, tab) {
       if (containerData.links.length === 0) return;
       if (
         !confirm(
-          `Trash all ${containerData.links.length} links in "${containerData.name}"?`
+          `Trash all ${containerData.links.length} links in "${containerData.name}"?`,
         )
       )
         return;
@@ -1755,7 +1806,7 @@ function createContainerElement(containerData, tab) {
   attachTooltip(
     reverseBtn,
     'Reverse order',
-    'Reverse the order of all links in this container'
+    'Reverse the order of all links in this container',
   );
 
   const delContainerBtn = createEl('button', {
@@ -1770,7 +1821,7 @@ function createContainerElement(containerData, tab) {
   attachTooltip(
     delContainerBtn,
     'Delete container',
-    'Move links to Trash and remove this container'
+    'Move links to Trash and remove this container',
   );
 
   headerActions.appendChild(renameBtn);
@@ -1808,7 +1859,7 @@ function renderActiveTab(container) {
     } else {
       // Sort trash links by deletedAt in descending order (most recent first)
       const sortedTrash = [...state.data.trash].sort(
-        (a, b) => (b.deletedAt || 0) - (a.deletedAt || 0)
+        (a, b) => (b.deletedAt || 0) - (a.deletedAt || 0),
       );
       sortedTrash.forEach(link => {
         const linkRow = createEl('div', { className: 'trash-link' });
@@ -1839,8 +1890,8 @@ function renderActiveTab(container) {
         const imgCountTrash = Array.isArray(link.imageUrls)
           ? link.imageUrls.length
           : link.imageUrl
-          ? 1
-          : 0;
+            ? 1
+            : 0;
         if (imgCountTrash > 0) {
           const imageBadge = createEl('span', {
             className: 'link-badge image-badge',
@@ -1888,7 +1939,7 @@ function renderActiveTab(container) {
         attachTooltip(
           restoreBtn,
           'Restore',
-          'Return this link to your first tab'
+          'Return this link to your first tab',
         );
         attachTooltip(deleteBtn, 'Delete', 'Permanently remove this link');
         actions.appendChild(restoreBtn);
@@ -1924,7 +1975,7 @@ function renderActiveTab(container) {
   function renderContainerBatch() {
     const endIndex = Math.min(
       nextContainerIndex + BATCH_SIZE,
-      tab.containers.length
+      tab.containers.length,
     );
     for (let i = nextContainerIndex; i < endIndex; i++) {
       const containerData = tab.containers[i];
@@ -1970,7 +2021,7 @@ function renderActiveTab(container) {
           renderContainerBatch();
         }
       },
-      { rootMargin: '200px' }
+      { rootMargin: '200px' },
     ); // Start loading before reaching bottom
 
     loaderObserver.observe(loaderEl);
@@ -2024,7 +2075,7 @@ function processJSONImport(jsonText) {
     }
     if (
       !confirm(
-        'Merge imported data with existing data? (Cancel to replace all)'
+        'Merge imported data with existing data? (Cancel to replace all)',
       )
     ) {
       state.data = imported;
@@ -2152,7 +2203,7 @@ function processOneTabImport(text) {
     persist();
     render();
     alert(
-      `Imported ${totalLinks} links into ${containersCreated} container(s)`
+      `Imported ${totalLinks} links into ${containersCreated} container(s)`,
     );
   } catch (err) {
     alert('Error importing OneTab format: ' + err.message);
@@ -2340,13 +2391,13 @@ function trashGroupExcept(group, strategy = 'newest') {
     keepIndex = group.links.reduce(
       (bestIdx, item, idx, arr) =>
         item.savedAt > arr[bestIdx].savedAt ? idx : bestIdx,
-      0
+      0,
     );
   } else if (strategy === 'oldest') {
     keepIndex = group.links.reduce(
       (bestIdx, item, idx, arr) =>
         item.savedAt < arr[bestIdx].savedAt ? idx : bestIdx,
-      0
+      0,
     );
   }
 
@@ -2356,7 +2407,7 @@ function trashGroupExcept(group, strategy = 'newest') {
     const removed = moveLinkToTrash(
       linkRef.tabId,
       linkRef.containerId,
-      linkRef.linkId
+      linkRef.linkId,
     );
     if (removed) trashed.push(removed);
   });
@@ -2447,7 +2498,7 @@ function renderDuplicates(container, duplicateGroups) {
     attachTooltip(
       keepNewestBtn,
       'Keep newest',
-      'Keep the most recent link and trash the rest'
+      'Keep the most recent link and trash the rest',
     );
 
     const keepOldestBtn = createEl('button', {
@@ -2462,7 +2513,7 @@ function renderDuplicates(container, duplicateGroups) {
     attachTooltip(
       keepOldestBtn,
       'Keep oldest',
-      'Keep the oldest link and trash the rest'
+      'Keep the oldest link and trash the rest',
     );
 
     const trashAllBtn = createEl('button', {
@@ -2483,7 +2534,7 @@ function renderDuplicates(container, duplicateGroups) {
     attachTooltip(
       trashAllBtn,
       'Trash all',
-      'Send all duplicates in this group to Trash'
+      'Send all duplicates in this group to Trash',
     );
 
     headerActions.appendChild(keepNewestBtn);
@@ -2531,8 +2582,8 @@ function renderDuplicates(container, duplicateGroups) {
         const imgCountDup = Array.isArray(linkRef.imageUrls)
           ? linkRef.imageUrls.length
           : linkRef.imageUrl
-          ? 1
-          : 0;
+            ? 1
+            : 0;
         if (imgCountDup > 0) {
           const imageBadge = createEl('span', {
             className: 'link-badge image-badge',
@@ -2571,7 +2622,7 @@ function renderDuplicates(container, duplicateGroups) {
             const removed = moveLinkToTrash(
               linkRef.tabId,
               linkRef.containerId,
-              linkRef.linkId
+              linkRef.linkId,
             );
             if (removed) {
               persist();
@@ -2723,8 +2774,8 @@ function render() {
     textContent: state.refreshingImages
       ? 'Refreshing…'
       : missingImages
-      ? `Refresh thumbnails (${missingImages})`
-      : 'Refresh thumbnails',
+        ? `Refresh thumbnails (${missingImages})`
+        : 'Refresh thumbnails',
     onClick: () => refreshMissingImages(),
     title: 'Fetch thumbnails for links missing images',
   });
@@ -2775,18 +2826,18 @@ function render() {
   attachTooltip(
     refreshThumbsBtn,
     'Refresh thumbnails',
-    'Attempt to fetch images for links missing thumbnails'
+    'Attempt to fetch images for links missing thumbnails',
   );
   attachTooltip(settingsBtn, 'Settings', 'Open LaterList settings');
   attachTooltip(
     bulkToggleBtn,
     'Bulk mode',
-    'Select multiple links to move or trash'
+    'Select multiple links to move or trash',
   );
   attachTooltip(
     bulkMoveBtn,
     'Move selected',
-    'Move selected links to a container'
+    'Move selected links to a container',
   );
   attachTooltip(bulkTrashBtn, 'Trash selected', 'Move selected links to Trash');
   attachTooltip(bulkClearBtn, 'Clear selection', 'Clear the current selection');
@@ -2921,13 +2972,13 @@ function onSidebarTabDragStart(evt) {
 
   console.log(
     '[LaterList] Starting drag with tab data:',
-    sidebarDrag.draggedTabData
+    sidebarDrag.draggedTabData,
   );
 
   evt.dataTransfer.effectAllowed = 'move';
   evt.dataTransfer.setData(
     'application/x-laterlist-tab',
-    JSON.stringify(sidebarDrag.draggedTabData)
+    JSON.stringify(sidebarDrag.draggedTabData),
   );
   tabEl.classList.add('dragging');
   setDragHoverActive(true);
@@ -3028,7 +3079,7 @@ function handleTabDropOnContainer(containerEl, tabData) {
 
     const targetTab = state.data.tabs.find(t => t.id === tabId);
     const targetContainer = targetTab?.containers.find(
-      c => c.id === containerId
+      c => c.id === containerId,
     );
 
     if (!targetContainer) {
@@ -3125,13 +3176,13 @@ function initSortable(rootEl) {
       onEnd: () => {
         try {
           const orderedIds = Array.from(
-            listEl.querySelectorAll('.draggable-tab')
+            listEl.querySelectorAll('.draggable-tab'),
           ).map(el => el.dataset.tabId);
           if (orderedIds.length !== state.data.tabs.length) return;
 
           const currentOrder = state.data.tabs.map(t => t.id);
           const changed = orderedIds.some(
-            (id, idx) => id !== currentOrder[idx]
+            (id, idx) => id !== currentOrder[idx],
           );
           if (!changed) return;
 
@@ -3176,10 +3227,10 @@ function initSortable(rootEl) {
           const fromTab = state.data.tabs.find(t => t.id === fromTabId);
           const toTab = state.data.tabs.find(t => t.id === toTabId);
           const fromContainer = fromTab?.containers.find(
-            c => c.id === fromContainerId
+            c => c.id === fromContainerId,
           );
           const toContainer = toTab?.containers.find(
-            c => c.id === toContainerId
+            c => c.id === toContainerId,
           );
           if (!fromContainer || !toContainer) return;
           const [moved] = fromContainer.links.splice(evt.oldIndex, 1);
@@ -3357,8 +3408,8 @@ function showContextMenu(event, linkData) {
   const imgCount = Array.isArray(link.imageUrls)
     ? link.imageUrls.length
     : link.imageUrl
-    ? 1
-    : 0;
+      ? 1
+      : 0;
   if (imgCount > 0) {
     items.push({
       label: `View images (${imgCount})`,
@@ -3434,13 +3485,13 @@ function showContextMenu(event, linkData) {
       showMoveModal((targetTabId, targetContainerId) => {
         const targetTab = state.data.tabs.find(t => t.id === targetTabId);
         const targetContainer = targetTab?.containers.find(
-          c => c.id === targetContainerId
+          c => c.id === targetContainerId,
         );
         if (!targetContainer) return;
 
         const fromTab = state.data.tabs.find(t => t.id === tabId);
         const fromContainer = fromTab?.containers.find(
-          c => c.id === containerId
+          c => c.id === containerId,
         );
         if (!fromContainer) return;
 
@@ -3579,8 +3630,8 @@ function showContextMenuTrash(event, link) {
   const imgCount = Array.isArray(link.imageUrls)
     ? link.imageUrls.length
     : link.imageUrl
-    ? 1
-    : 0;
+      ? 1
+      : 0;
   if (imgCount > 0) {
     items.push({
       label: `View images (${imgCount})`,

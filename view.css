@@ -650,6 +650,31 @@ h1 {
   line-height: 1.4;
 }
 
+.status-overlay-summary {
+  max-height: 150px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.status-overlay-keywords {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.status-overlay-keyword {
+  display: inline-block;
+  padding: 3px 8px;
+  background: var(--accent-light);
+  border: 1px solid var(--accent);
+  border-radius: 12px;
+  font-size: 11px;
+  color: var(--accent);
+  font-weight: 500;
+}
+
 .status-overlay-relative {
   font-size: 12px;
   color: var(--text-secondary);

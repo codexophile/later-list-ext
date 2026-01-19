@@ -299,6 +299,27 @@ function canExtractFromUrl(url) {
   return lower.startsWith('http://') || lower.startsWith('https://');
 }
 
+function copyMetadataToLink(extracted, link) {
+  if (extracted.imageUrls?.length > 0) {
+    link.imageUrls = extracted.imageUrls;
+    link.imageUrl = extracted.imageUrl;
+  }
+  if (extracted.publishedAt) link.publishedAt = extracted.publishedAt;
+  if (extracted.description) link.description = extracted.description;
+  if (extracted.summary) link.summary = extracted.summary;
+  if (extracted.keywords) link.keywords = extracted.keywords;
+  if (extracted.author) link.author = extracted.author;
+  if (extracted.siteName) link.siteName = extracted.siteName;
+  if (extracted.canonical) link.canonical = extracted.canonical;
+  if (extracted.type) link.type = extracted.type;
+  if (extracted.locale) link.locale = extracted.locale;
+  if (extracted.author) link.author = extracted.author;
+  if (extracted.siteName) link.siteName = extracted.siteName;
+  if (extracted.canonical) link.canonical = extracted.canonical;
+  if (extracted.type) link.type = extracted.type;
+  if (extracted.locale) link.locale = extracted.locale;
+}
+
 function findLinkByIds(data, tabId, containerId, linkId) {
   const tab = data.tabs.find(t => t.id === tabId);
   if (!tab) return null;
@@ -350,6 +371,11 @@ async function processMetadataQueue() {
         if (extracted.description) link.description = extracted.description;
         if (extracted.summary) link.summary = extracted.summary;
         if (extracted.keywords) link.keywords = extracted.keywords;
+        if (extracted.author) link.author = extracted.author;
+        if (extracted.siteName) link.siteName = extracted.siteName;
+        if (extracted.canonical) link.canonical = extracted.canonical;
+        if (extracted.type) link.type = extracted.type;
+        if (extracted.locale) link.locale = extracted.locale;
 
         link.metaStatus = 'done';
         link.metaError = '';
@@ -457,6 +483,11 @@ async function sendAllBrowserTabsToLaterList() {
           if (cached.description) link.description = cached.description;
           if (cached.summary) link.summary = cached.summary;
           if (cached.keywords) link.keywords = cached.keywords;
+          if (cached.author) link.author = cached.author;
+          if (cached.siteName) link.siteName = cached.siteName;
+          if (cached.canonical) link.canonical = cached.canonical;
+          if (cached.type) link.type = cached.type;
+          if (cached.locale) link.locale = cached.locale;
           link.metaStatus = 'done';
           link.metaError = '';
         } else if (!tab.discarded && isHttp) {
@@ -504,6 +535,11 @@ async function sendAllBrowserTabsToLaterList() {
             if (extracted.description) link.description = extracted.description;
             if (extracted.summary) link.summary = extracted.summary;
             if (extracted.keywords) link.keywords = extracted.keywords;
+            if (extracted.author) link.author = extracted.author;
+            if (extracted.siteName) link.siteName = extracted.siteName;
+            if (extracted.canonical) link.canonical = extracted.canonical;
+            if (extracted.type) link.type = extracted.type;
+            if (extracted.locale) link.locale = extracted.locale;
             link.metaStatus = 'done';
             link.metaError = '';
           } catch (err) {
@@ -682,6 +718,11 @@ async function sendTabsAroundCurrentTab(direction) {
           if (cached.description) link.description = cached.description;
           if (cached.summary) link.summary = cached.summary;
           if (cached.keywords) link.keywords = cached.keywords;
+          if (cached.author) link.author = cached.author;
+          if (cached.siteName) link.siteName = cached.siteName;
+          if (cached.canonical) link.canonical = cached.canonical;
+          if (cached.type) link.type = cached.type;
+          if (cached.locale) link.locale = cached.locale;
           link.metaStatus = 'done';
           link.metaError = '';
         } else if (!tab.discarded && isHttp) {
@@ -729,6 +770,11 @@ async function sendTabsAroundCurrentTab(direction) {
             if (extracted.description) link.description = extracted.description;
             if (extracted.summary) link.summary = extracted.summary;
             if (extracted.keywords) link.keywords = extracted.keywords;
+            if (extracted.author) link.author = extracted.author;
+            if (extracted.siteName) link.siteName = extracted.siteName;
+            if (extracted.canonical) link.canonical = extracted.canonical;
+            if (extracted.type) link.type = extracted.type;
+            if (extracted.locale) link.locale = extracted.locale;
             link.metaStatus = 'done';
             link.metaError = '';
           } catch (err) {
@@ -1172,6 +1218,11 @@ async function extractFromHtml(html, url, rule = { allow: [], deny: [] }) {
     description: null,
     summary: null,
     keywords: null,
+    author: null,
+    siteName: null,
+    canonical: null,
+    type: null,
+    locale: null,
   };
 
   try {
@@ -1366,6 +1417,58 @@ async function extractFromHtml(html, url, rule = { allow: [], deny: [] }) {
     });
 
     if (keywords.length > 0) result.keywords = keywords;
+
+    // Author
+    const authorMeta = doc.querySelector('meta[name="author"]');
+    if (authorMeta?.content) {
+      result.author = authorMeta.content.trim();
+    } else if (jsonLd?.author?.name) {
+      result.author = jsonLd.author.name;
+    }
+
+    // Site Name
+    const siteNameMeta = doc.querySelector('meta[property="og:site_name"]');
+    if (siteNameMeta?.content) {
+      result.siteName = siteNameMeta.content.trim();
+    }
+
+    // Canonical URL
+    const canonicalLink = doc.querySelector('link[rel="canonical"]');
+    if (canonicalLink?.href) {
+      result.canonical = canonicalLink.href.trim();
+    }
+
+    // Content Type
+    const typeMeta = doc.querySelector('meta[property="og:type"]');
+    if (typeMeta?.content) {
+      result.type = typeMeta.content.trim();
+    }
+
+    // Locale
+    const localeMeta = doc.querySelector('meta[property="og:locale"]');
+    if (localeMeta?.content) {
+      result.locale = localeMeta.content.trim();
+    }
+
+    // Summary: combine description + first paragraph
+    if (result.description) {
+      result.summary = result.description;
+    }
+    // Try to get first paragraph for richer summary
+    const firstParagraph = doc.querySelector(
+      'article p, .entry-content p, .post-content p, main p',
+    );
+    if (firstParagraph?.textContent) {
+      const paragraphText = firstParagraph.textContent.trim();
+      if (paragraphText.length > 50) {
+        if (result.summary && result.summary !== paragraphText) {
+          // Combine both if different
+          result.summary = `${result.summary}\n\n${paragraphText}`;
+        } else if (!result.summary) {
+          result.summary = paragraphText;
+        }
+      }
+    }
   } catch (err) {
     console.warn('[LaterList] HTML extraction failed:', err);
   }
@@ -1393,6 +1496,11 @@ async function extractFromTab(tabId, pageUrl, rule = { allow: [], deny: [] }) {
     description: null,
     summary: null,
     keywords: null,
+    author: null,
+    siteName: null,
+    canonical: null,
+    type: null,
+    locale: null,
   };
 
   try {
@@ -1704,11 +1812,52 @@ async function extractFromTab(tabId, pageUrl, rule = { allow: [], deny: [] }) {
           return keywords.length > 0 ? keywords : null;
         };
 
+        const extractAuthor = () => {
+          const authorMeta = document.querySelector('meta[name="author"]');
+          if (authorMeta?.content) return authorMeta.content.trim();
+          const jsonLd = extractJsonLd();
+          if (jsonLd?.author?.name) return jsonLd.author.name;
+          return null;
+        };
+
+        const extractSiteName = () => {
+          const siteNameMeta = document.querySelector(
+            'meta[property="og:site_name"]',
+          );
+          if (siteNameMeta?.content) return siteNameMeta.content.trim();
+          return null;
+        };
+
+        const extractCanonical = () => {
+          const canonicalLink = document.querySelector('link[rel="canonical"]');
+          if (canonicalLink?.href) return canonicalLink.href.trim();
+          return null;
+        };
+
+        const extractType = () => {
+          const typeMeta = document.querySelector('meta[property="og:type"]');
+          if (typeMeta?.content) return typeMeta.content.trim();
+          return null;
+        };
+
+        const extractLocale = () => {
+          const localeMeta = document.querySelector(
+            'meta[property="og:locale"]',
+          );
+          if (localeMeta?.content) return localeMeta.content.trim();
+          return null;
+        };
+
         return {
           publishedAt: extractPublishedDate(),
           description: extractDescription(),
           summary: extractSummary(),
           keywords: extractKeywords(),
+          author: extractAuthor(),
+          siteName: extractSiteName(),
+          canonical: extractCanonical(),
+          type: extractType(),
+          locale: extractLocale(),
         };
       },
     });
@@ -1718,6 +1867,11 @@ async function extractFromTab(tabId, pageUrl, rule = { allow: [], deny: [] }) {
     result.description = meta.description;
     result.summary = meta.summary;
     result.keywords = meta.keywords;
+    result.author = meta.author;
+    result.siteName = meta.siteName;
+    result.canonical = meta.canonical;
+    result.type = meta.type;
+    result.locale = meta.locale;
   } catch (err) {
     console.warn('[LaterList] Extraction failed:', err);
   }

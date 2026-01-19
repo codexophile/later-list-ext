@@ -158,18 +158,56 @@ function renderPreview() {
   if (dateEl) {
     if (previewData.publishedAt) {
       dateEl.textContent = new Date(
-        previewData.publishedAt
+        previewData.publishedAt,
       ).toLocaleDateString();
     } else {
       dateEl.textContent = '';
     }
   }
   if (keywordsEl) {
-    keywordsEl.textContent = previewData.keywords || '';
+    keywordsEl.replaceChildren();
+    if (previewData.keywords && previewData.keywords.length > 0) {
+      previewData.keywords.slice(0, 5).forEach(kw => {
+        const chip = document.createElement('span');
+        chip.className = 'keyword-chip';
+        chip.textContent = kw;
+        keywordsEl.appendChild(chip);
+      });
+    }
   }
   if (summaryEl) {
+    summaryEl.replaceChildren();
+
+    // Author & Site Name
+    if (previewData.author || previewData.siteName) {
+      const byline = document.createElement('div');
+      byline.className = 'preview-byline';
+      if (previewData.author) byline.textContent += `By ${previewData.author}`;
+      if (previewData.siteName) {
+        if (previewData.author) byline.textContent += ` • `;
+        byline.textContent += previewData.siteName;
+      }
+      summaryEl.appendChild(byline);
+    }
+
+    // Type badge
+    if (previewData.type) {
+      const typeBadge = document.createElement('div');
+      typeBadge.className = 'preview-type-badge';
+      typeBadge.textContent = previewData.type;
+      summaryEl.appendChild(typeBadge);
+    }
+
+    // Summary text
     if (previewData.summary) {
-      summaryEl.textContent = previewData.summary;
+      const summaryText = document.createElement('div');
+      summaryText.className = 'preview-summary-text';
+      summaryText.textContent = previewData.summary;
+      summaryEl.appendChild(summaryText);
+    }
+
+    // Show/hide section
+    if (summaryEl.children.length > 0) {
       summaryEl.style.display = 'block';
     } else {
       summaryEl.style.display = 'none';
@@ -221,7 +259,7 @@ async function loadDataAndPopulatePickers() {
     populateSelect(
       containerSelect,
       [{ id: '', label: 'No containers found' }],
-      ''
+      '',
     );
     return;
   }
@@ -265,7 +303,7 @@ async function saveToSelection({ closeTabAfterSave }) {
           function: () => {
             const extractJsonLd = () => {
               const scripts = document.querySelectorAll(
-                'script[type="application/ld+json"]'
+                'script[type="application/ld+json"]',
               );
               for (const script of scripts) {
                 try {
@@ -370,7 +408,7 @@ async function saveToSelection({ closeTabAfterSave }) {
               }
 
               const metaKeywords = document.querySelector(
-                'meta[name="keywords"]'
+                'meta[name="keywords"]',
               );
               if (metaKeywords) {
                 const content = metaKeywords.getAttribute('content') || '';
@@ -384,7 +422,7 @@ async function saveToSelection({ closeTabAfterSave }) {
               }
 
               const metaTags = document.querySelectorAll(
-                'meta[property="article:tag"]'
+                'meta[property="article:tag"]',
               );
               metaTags.forEach(tag => {
                 const content = tag.getAttribute('content');
@@ -526,7 +564,7 @@ async function sendTabsAround(direction) {
       const dirLabel =
         direction === 'before' ? 'before current' : 'after current';
       setStatus(
-        `✓ ${result.count} tabs ${dirLabel} saved to "${result.containerName}"`
+        `✓ ${result.count} tabs ${dirLabel} saved to "${result.containerName}"`,
       );
       // Close popup after a brief delay
       setTimeout(() => window.close(), 1500);

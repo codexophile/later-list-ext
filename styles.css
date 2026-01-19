@@ -29,12 +29,17 @@ body.popup-body {
   min-width: 320px;
   max-width: 420px;
   height: auto;
-  background: radial-gradient(
+  background:
+    radial-gradient(
       circle at 20% 20%,
       rgba(45, 212, 191, 0.12),
       transparent 22%
     ),
-    radial-gradient(circle at 80% 0%, rgba(245, 158, 11, 0.12), transparent 25%),
+    radial-gradient(
+      circle at 80% 0%,
+      rgba(245, 158, 11, 0.12),
+      transparent 25%
+    ),
     linear-gradient(145deg, #0b1220 0%, #0e1625 40%, #0a0f1c 100%);
   color: var(--text);
   font-family: var(--font);
@@ -309,6 +314,13 @@ body.popup-body {
   margin-top: 6px;
 }
 
+.meta-keywords {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 8px;
+}
+
 .meta-chip {
   border: 1px solid var(--stroke);
   background: var(--chip);
@@ -327,8 +339,50 @@ body.popup-body {
   background: rgba(45, 212, 191, 0.05);
   border-radius: var(--radius-sm);
   border-left: 2px solid var(--primary);
-  max-height: 120px;
+  max-height: 200px;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.preview-byline {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-weight: 500;
+}
+
+.preview-type-badge {
+  display: inline-block;
+  padding: 3px 8px;
+  background: rgba(99, 102, 241, 0.15);
+  color: #6366f1;
+  border-radius: 12px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  align-self: flex-start;
+}
+
+.preview-summary-text {
+  font-size: 12px;
+  color: var(--text);
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+
+.keyword-chip {
+  display: inline-block;
+  padding: 3px 8px;
+  background: rgba(45, 212, 191, 0.1);
+  border: 1px solid var(--primary);
+  border-radius: 12px;
+  font-size: 10px;
+  color: var(--primary);
+  font-weight: 500;
+  margin-right: 4px;
+  margin-bottom: 4px;
 }
 
 /* Skeleton placeholder */

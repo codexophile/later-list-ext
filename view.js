@@ -104,6 +104,18 @@ function scheduleTabHoverSwitch(tabId, tabEl) {
 const id = prefix =>
   `${prefix}-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
 
+function escapeHtml(text) {
+  if (!text) return '';
+  const map = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#039;',
+  };
+  return text.replace(/[&<>"']/g, char => map[char]);
+}
+
 function formatDate(timestamp) {
   if (!timestamp) return 'Unknown';
   const date = new Date(timestamp);
@@ -282,6 +294,67 @@ function showStatusOverlay(linkData) {
   if (linkData.locked) {
     content += `<div class="status-overlay-section">`;
     content += `<div class="status-overlay-badge locked">🔒 Locked</div>`;
+    content += `</div>`;
+  }
+
+  // High-value metadata fields
+  if (linkData.author) {
+    content += `<div class="status-overlay-section">`;
+    content += `<div class="status-overlay-label">Author</div>`;
+    content += `<div class="status-overlay-value">${escapeHtml(linkData.author)}</div>`;
+    content += `</div>`;
+  }
+
+  if (linkData.siteName) {
+    content += `<div class="status-overlay-section">`;
+    content += `<div class="status-overlay-label">Site</div>`;
+    content += `<div class="status-overlay-value">${escapeHtml(linkData.siteName)}</div>`;
+    content += `</div>`;
+  }
+
+  if (linkData.type) {
+    content += `<div class="status-overlay-section">`;
+    content += `<div class="status-overlay-label">Type</div>`;
+    content += `<div class="status-overlay-value">${escapeHtml(linkData.type)}</div>`;
+    content += `</div>`;
+  }
+
+  if (linkData.description) {
+    content += `<div class="status-overlay-section">`;
+    content += `<div class="status-overlay-label">Description</div>`;
+    content += `<div class="status-overlay-value">${escapeHtml(linkData.description)}</div>`;
+    content += `</div>`;
+  }
+
+  if (linkData.summary) {
+    content += `<div class="status-overlay-section">`;
+    content += `<div class="status-overlay-label">Summary</div>`;
+    content += `<div class="status-overlay-value status-overlay-summary">${escapeHtml(linkData.summary)}</div>`;
+    content += `</div>`;
+  }
+
+  if (linkData.keywords && linkData.keywords.length > 0) {
+    content += `<div class="status-overlay-section">`;
+    content += `<div class="status-overlay-label">Keywords</div>`;
+    content += `<div class="status-overlay-keywords">`;
+    linkData.keywords.forEach(kw => {
+      content += `<span class="status-overlay-keyword">${escapeHtml(kw)}</span>`;
+    });
+    content += `</div>`;
+    content += `</div>`;
+  }
+
+  if (linkData.locale) {
+    content += `<div class="status-overlay-section">`;
+    content += `<div class="status-overlay-label">Language</div>`;
+    content += `<div class="status-overlay-value">${escapeHtml(linkData.locale)}</div>`;
+    content += `</div>`;
+  }
+
+  if (linkData.canonical && linkData.canonical !== linkData.url) {
+    content += `<div class="status-overlay-section">`;
+    content += `<div class="status-overlay-label">Canonical URL</div>`;
+    content += `<div class="status-overlay-value"><a href="${linkData.canonical}" target="_blank">${linkData.canonical}</a></div>`;
     content += `</div>`;
   }
 

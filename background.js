@@ -202,7 +202,80 @@ async function getData() {
 }
 
 async function saveData(data) {
-  await chrome.storage.local.set({ readLaterData: data });
+  try {
+    await chrome.storage.local.set({ readLaterData: data });
+  } catch (err) {
+    if (!isQuotaError(err)) throw err;
+    const trimmed = trimDataToQuota(data);
+    await chrome.storage.local.set({ readLaterData: trimmed });
+  }
+}
+
+const STORAGE_QUOTA_BYTES =
+  chrome?.storage?.local?.QUOTA_BYTES || 5 * 1024 * 1024;
+
+function estimateBytes(value) {
+  try {
+    const json = JSON.stringify(value);
+    return new TextEncoder().encode(json).length;
+  } catch {
+    return Number.POSITIVE_INFINITY;
+  }
+}
+
+function isQuotaError(err) {
+  const message = String(err?.message || '').toLowerCase();
+  return message.includes('quota') || message.includes('quota_bytes');
+}
+
+function pruneLinkMetadata(link) {
+  if (!link || typeof link !== 'object') return;
+  if (Array.isArray(link.imageUrls) && !link.imageUrl && link.imageUrls[0]) {
+    link.imageUrl = link.imageUrls[0];
+  }
+  delete link.imageUrls;
+  delete link.iframes;
+  delete link.summary;
+  delete link.description;
+  delete link.keywords;
+}
+
+function trimDataToQuota(data) {
+  let currentBytes = estimateBytes(data);
+  if (currentBytes <= STORAGE_QUOTA_BYTES) return data;
+
+  // Step 1: remove heavy metadata fields from all links
+  const allLinks = [];
+  data?.tabs?.forEach(tab => {
+    tab?.containers?.forEach(container => {
+      container?.links?.forEach(link => {
+        allLinks.push({ container, link, bucket: 'tab' });
+      });
+    });
+  });
+  data?.trash?.forEach(link => {
+    allLinks.push({ container: data.trash, link, bucket: 'trash' });
+  });
+
+  allLinks.forEach(({ link }) => pruneLinkMetadata(link));
+  currentBytes = estimateBytes(data);
+  if (currentBytes <= STORAGE_QUOTA_BYTES) return data;
+
+  // Step 2: remove oldest links until within quota
+  allLinks.sort((a, b) => (a.link.savedAt || 0) - (b.link.savedAt || 0));
+  for (const item of allLinks) {
+    if (estimateBytes(data) <= STORAGE_QUOTA_BYTES) break;
+    if (item.bucket === 'trash') {
+      const idx = data.trash.findIndex(l => l.id === item.link.id);
+      if (idx >= 0) data.trash.splice(idx, 1);
+    } else if (item.container?.links) {
+      item.container.links = item.container.links.filter(
+        l => l.id !== item.link.id,
+      );
+    }
+  }
+
+  return data;
 }
 
 async function getSettings() {

@@ -22,6 +22,7 @@ This is a Chromium browser extension inspired by the Onetab extension. The goal 
 - Click the extension icon to save your current tabs.
 - Access saved tabs from the popup interface. The main LaterList view lives in a pinned tab; actions reuse that tab instead of opening new ones.
 - When browsing, metadata is captured automatically at page load. Later, when you send tabs, cached metadata (including embedded iframe URLs) is attached immediately. Unsupported schemes (non-http/https) are skipped.
+- If the storage quota is exceeded, the extension automatically trims heavy metadata fields (like iframe lists, extra images, summaries, and keywords) and may drop the oldest links to recover.
 
 ## License
 

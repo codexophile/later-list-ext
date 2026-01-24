@@ -244,7 +244,7 @@ function trimDataToQuota(data) {
   let currentBytes = estimateBytes(data);
   if (currentBytes <= STORAGE_QUOTA_BYTES) return data;
 
-  // Step 1: remove heavy metadata fields from all links
+  // Remove heavy metadata fields from all links to reduce size
   const allLinks = [];
   data?.tabs?.forEach(tab => {
     tab?.containers?.forEach(container => {
@@ -258,22 +258,6 @@ function trimDataToQuota(data) {
   });
 
   allLinks.forEach(({ link }) => pruneLinkMetadata(link));
-  currentBytes = estimateBytes(data);
-  if (currentBytes <= STORAGE_QUOTA_BYTES) return data;
-
-  // Step 2: remove oldest links until within quota
-  allLinks.sort((a, b) => (a.link.savedAt || 0) - (b.link.savedAt || 0));
-  for (const item of allLinks) {
-    if (estimateBytes(data) <= STORAGE_QUOTA_BYTES) break;
-    if (item.bucket === 'trash') {
-      const idx = data.trash.findIndex(l => l.id === item.link.id);
-      if (idx >= 0) data.trash.splice(idx, 1);
-    } else if (item.container?.links) {
-      item.container.links = item.container.links.filter(
-        l => l.id !== item.link.id,
-      );
-    }
-  }
 
   return data;
 }

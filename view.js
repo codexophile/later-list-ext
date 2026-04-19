@@ -203,6 +203,7 @@ function positionStatusOverlay(overlay) {
 }
 
 function showStatusOverlay(linkData) {
+  if (dragHoverSwitch.isDragging) return;
   const overlay = createStatusOverlay();
 
   let content = `<div class="status-overlay-title">${linkData.title}</div>`;
@@ -3113,6 +3114,7 @@ function renderOpenTabsList() {
 function onSidebarTabDragStart(evt) {
   const tabEl = evt.currentTarget;
   sidebarDrag.draggedElement = tabEl;
+  hideStatusOverlay();
 
   // Get the tab object stored directly on the element
   const browserTab = tabEl._laterlistBrowserTab;
@@ -3330,7 +3332,10 @@ function initSortable(rootEl) {
       draggable: '.draggable-tab',
       direction: 'horizontal',
       ghostClass: 'sortable-ghost',
-      onStart: () => setDragHoverActive(true),
+      onStart: () => {
+        hideStatusOverlay();
+        setDragHoverActive(true);
+      },
       onEnd: () => {
         try {
           const orderedIds = Array.from(
@@ -3375,7 +3380,10 @@ function initSortable(rootEl) {
         // Only allow dropping links into container-content lists
         return evt.to?.classList.contains('container-content') || false;
       },
-      onStart: () => setDragHoverActive(true),
+      onStart: () => {
+        hideStatusOverlay();
+        setDragHoverActive(true);
+      },
       onEnd: evt => {
         try {
           const fromContainerId = evt.from.dataset.containerId;

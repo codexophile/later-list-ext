@@ -72,9 +72,31 @@ async function performGistSync(force = false) {
       METADATA_CACHE_KEY,
     ]);
 
+    // Remove any secret token from settings before uploading to gist
+    let laterlistSettingsToUpload = stored.laterlistSettings || settings;
+    try {
+      laterlistSettingsToUpload = JSON.parse(
+        JSON.stringify(laterlistSettingsToUpload),
+      );
+      if (laterlistSettingsToUpload && laterlistSettingsToUpload.gist) {
+        laterlistSettingsToUpload.gist = {
+          ...laterlistSettingsToUpload.gist,
+          token: '',
+        };
+      }
+    } catch (err) {
+      // fallback: ensure no token
+      if (laterlistSettingsToUpload && laterlistSettingsToUpload.gist) {
+        laterlistSettingsToUpload.gist = {
+          ...laterlistSettingsToUpload.gist,
+          token: '',
+        };
+      }
+    }
+
     const payload = {
       readLaterData: stored.readLaterData || DEFAULT_DATA,
-      laterlistSettings: stored.laterlistSettings || settings,
+      laterlistSettings: laterlistSettingsToUpload,
       metadataCache: stored[METADATA_CACHE_KEY] || {},
       exportedAt: Date.now(),
     };
@@ -140,8 +162,16 @@ async function restoreFromGist() {
 
   const toSet = {};
   if (parsed.readLaterData) toSet.readLaterData = parsed.readLaterData;
-  if (parsed.laterlistSettings)
-    toSet.laterlistSettings = parsed.laterlistSettings;
+  if (parsed.laterlistSettings) {
+    // Preserve any locally stored token instead of trusting token in gist
+    const existing = await chrome.storage.local.get('laterlistSettings');
+    const existingToken = existing?.laterlistSettings?.gist?.token || '';
+
+    const parsedGist = parsed.laterlistSettings.gist || {};
+    parsedGist.token = existingToken;
+
+    toSet.laterlistSettings = { ...parsed.laterlistSettings, gist: parsedGist };
+  }
   if (parsed.metadataCache) toSet[METADATA_CACHE_KEY] = parsed.metadataCache;
 
   if (Object.keys(toSet).length === 0)

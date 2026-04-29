@@ -21,13 +21,136 @@ const DEFAULT_SETTINGS = {
   sendAllTabsDestination: '', // Empty means first tab
   urlCleanup: DEFAULT_URL_CLEANUP,
   imageRules: DEFAULT_IMAGE_RULES,
+  gist: {
+    token: '',
+    gistId: '',
+    fileName: 'laterlist.json',
+    autoSync: false,
+  },
 };
 
 function mergeSettings(raw = {}) {
   const merged = { ...DEFAULT_SETTINGS, ...raw };
   merged.urlCleanup = { ...DEFAULT_URL_CLEANUP, ...(raw.urlCleanup || {}) };
   merged.imageRules = Array.isArray(raw.imageRules) ? raw.imageRules : [];
+  merged.gist = { ...DEFAULT_SETTINGS.gist, ...(raw.gist || {}) };
   return merged;
+}
+
+// --- Gist sync support ---
+let _gistSyncTimer = null;
+let _gistSyncInProgress = false;
+
+function scheduleGistSync(delay = 1200) {
+  try {
+    if (_gistSyncTimer) clearTimeout(_gistSyncTimer);
+    _gistSyncTimer = setTimeout(() => {
+      _gistSyncTimer = null;
+      performGistSync().catch(err => {
+        console.warn('[LaterList] Gist sync failed:', err);
+      });
+    }, delay);
+  } catch (err) {
+    console.warn('[LaterList] scheduleGistSync failed:', err);
+  }
+}
+
+async function performGistSync(force = false) {
+  if (_gistSyncInProgress) return;
+  _gistSyncInProgress = true;
+  try {
+    const settings = await getSettings();
+    const gist = settings.gist || {};
+    if (!force) {
+      if (!gist.autoSync) return;
+    }
+    if (!gist.token || !gist.gistId || !gist.fileName) return;
+
+    const stored = await chrome.storage.local.get([
+      'readLaterData',
+      'laterlistSettings',
+      METADATA_CACHE_KEY,
+    ]);
+
+    const payload = {
+      readLaterData: stored.readLaterData || DEFAULT_DATA,
+      laterlistSettings: stored.laterlistSettings || settings,
+      metadataCache: stored[METADATA_CACHE_KEY] || {},
+      exportedAt: Date.now(),
+    };
+
+    const body = {
+      files: {
+        [gist.fileName]: { content: JSON.stringify(payload, null, 2) },
+      },
+    };
+
+    const resp = await fetch(`https://api.github.com/gists/${gist.gistId}`, {
+      method: 'PATCH',
+      headers: {
+        Authorization: `token ${gist.token}`,
+        Accept: 'application/vnd.github.v3+json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!resp.ok) {
+      const text = await resp.text();
+      throw new Error(`Gist update failed: ${resp.status} ${text}`);
+    }
+    console.log('[LaterList] Gist sync completed');
+    return true;
+  } finally {
+    _gistSyncInProgress = false;
+  }
+}
+
+async function restoreFromGist() {
+  const settings = await getSettings();
+  const gist = settings.gist || {};
+  if (!gist.token || !gist.gistId || !gist.fileName) {
+    throw new Error('Missing gist settings');
+  }
+
+  const resp = await fetch(`https://api.github.com/gists/${gist.gistId}`, {
+    method: 'GET',
+    headers: {
+      Authorization: `token ${gist.token}`,
+      Accept: 'application/vnd.github.v3+json',
+    },
+  });
+
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new Error(`Gist fetch failed: ${resp.status} ${text}`);
+  }
+
+  const g = await resp.json();
+  if (!g.files || !g.files[gist.fileName] || !g.files[gist.fileName].content) {
+    throw new Error('Gist file not found or empty');
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(g.files[gist.fileName].content);
+  } catch (err) {
+    throw new Error('Invalid JSON in gist file');
+  }
+
+  const toSet = {};
+  if (parsed.readLaterData) toSet.readLaterData = parsed.readLaterData;
+  if (parsed.laterlistSettings)
+    toSet.laterlistSettings = parsed.laterlistSettings;
+  if (parsed.metadataCache) toSet[METADATA_CACHE_KEY] = parsed.metadataCache;
+
+  if (Object.keys(toSet).length === 0)
+    throw new Error('No supported keys in gist file');
+
+  await chrome.storage.local.set(toSet);
+  // Notify view to refresh
+  chrome.runtime.sendMessage({ type: 'laterlist:updateView' }).catch(() => {});
+  return { success: true };
 }
 
 function wildcardToRegex(pattern) {
@@ -2003,6 +2126,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       .catch(err => sendResponse({ error: err?.message }));
     return true;
   }
+  if (message?.type === 'laterlist:gistSync') {
+    performGistSync(true)
+      .then(() => sendResponse({ success: true }))
+      .catch(err => sendResponse({ success: false, error: err?.message }));
+    return true;
+  }
+  if (message?.type === 'laterlist:gistRestore') {
+    restoreFromGist()
+      .then(result => sendResponse({ success: true, result }))
+      .catch(err => sendResponse({ success: false, error: err?.message }));
+    return true;
+  }
   if (message?.type === 'laterlist:sendAllTabs') {
     sendAllBrowserTabsToLaterList()
       .then(result => sendResponse(result))
@@ -2100,7 +2235,14 @@ chrome.tabs.onActivated.addListener(async activeInfo => {
 });
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
-  if (areaName !== 'local' || !changes.readLaterData) return;
+  if (areaName !== 'local') return;
+
+  const changedRelevant =
+    changes.readLaterData ||
+    changes.laterlistSettings ||
+    changes[METADATA_CACHE_KEY];
+
+  // Refresh UI state for all tabs
   chrome.tabs
     .query({})
     .then(tabs => {
@@ -2109,4 +2251,9 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
       });
     })
     .catch(() => {});
+
+  // Schedule gist sync if enabled
+  if (changedRelevant) {
+    scheduleGistSync();
+  }
 });

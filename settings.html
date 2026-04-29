@@ -320,6 +320,7 @@
         <button class="settings-tab active" data-tab="send-all-tabs">Send All Tabs</button>
         <button class="settings-tab" data-tab="url-cleanup">URL Cleanup</button>
         <button class="settings-tab" data-tab="image-rules">Image Rules</button>
+        <button class="settings-tab" data-tab="sync">Sync</button>
       </div>
     </div>
 
@@ -439,6 +440,45 @@ icid"></textarea>
           <div class="setting-help">
             For meta tags denial, include selectors like <code>meta[property="og:image"]</code> in the Deny list.
           </div>
+        </div>
+      </div>
+
+      <!-- Sync Tab -->
+      <div class="settings-content-wrapper" data-tab-content="sync">
+        <div class="settings-content-header">
+          <h2>GitHub Gist Sync</h2>
+          <p>Configure syncing of your LaterList data to a GitHub Gist.</p>
+        </div>
+
+        <div class="setting-group">
+          <label class="setting-label" for="gist-token">GitHub API Token</label>
+          <input id="gist-token" class="setting-input" placeholder="ghp_xxx (personal access token)" />
+          <div class="setting-help">A personal access token with Gist access. Stored locally in the extension.</div>
+        </div>
+
+        <div class="setting-group">
+          <label class="setting-label" for="gist-id">Gist ID</label>
+          <input id="gist-id" class="setting-input" placeholder="Gist ID to use for sync" />
+          <div class="setting-help">The ID of the gist to store your data in.</div>
+        </div>
+
+        <div class="setting-group">
+          <label class="setting-label" for="gist-file">Gist File Name</label>
+          <input id="gist-file" class="setting-input" placeholder="laterlist.json" />
+          <div class="setting-help">The filename inside the gist where the JSON will be saved.</div>
+        </div>
+
+        <div class="setting-group">
+          <label class="setting-label">
+            <input type="checkbox" id="gist-auto-sync" class="setting-checkbox" />
+            Enable automatic sync on changes
+          </label>
+          <div class="setting-help">When enabled, the extension will push changes to the gist automatically.</div>
+        </div>
+
+        <div class="setting-group" style="display:flex;gap:12px;align-items:center;">
+          <button id="gist-sync-now" class="save-button">Sync Now</button>
+          <button id="gist-restore" class="save-button">Restore From Gist</button>
         </div>
       </div>
     </div>

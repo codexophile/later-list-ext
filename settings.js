@@ -21,12 +21,19 @@ const DEFAULT_SETTINGS = {
   sendAllTabsDestination: '', // Empty means first tab
   urlCleanup: DEFAULT_URL_CLEANUP,
   imageRules: DEFAULT_IMAGE_RULES,
+  gist: {
+    token: '',
+    gistId: '',
+    fileName: 'laterlist.json',
+    autoSync: false,
+  },
 };
 
 function mergeSettings(raw = {}) {
   const merged = { ...DEFAULT_SETTINGS, ...raw };
   merged.urlCleanup = { ...DEFAULT_URL_CLEANUP, ...(raw.urlCleanup || {}) };
   merged.imageRules = Array.isArray(raw.imageRules) ? raw.imageRules : [];
+  merged.gist = { ...DEFAULT_SETTINGS.gist, ...(raw.gist || {}) };
   return merged;
 }
 
@@ -155,13 +162,13 @@ function createRuleRow(rule = {}, index = 0) {
 
     <label class="setting-label">Allow selectors (one per line)</label>
     <textarea class="setting-input setting-textarea rule-allow" placeholder=".article img\nmain img">${formatList(
-      rule.allow || []
+      rule.allow || [],
     )}</textarea>
     <div class="setting-help">If provided, only elements matching at least one of these selectors are kept.</div>
 
     <label class="setting-label">Deny selectors (one per line)</label>
     <textarea class="setting-input setting-textarea rule-deny" placeholder="header img\nnav img\nmeta[property='og:image']">${formatList(
-      rule.deny || []
+      rule.deny || [],
     )}</textarea>
     <div class="setting-help">Any element matching these selectors is skipped. Deny overrides allow.</div>
 
@@ -404,6 +411,18 @@ async function loadAndPopulateSettings() {
   await populateDestinationTabs(settings);
   updatePreview();
   updateNormalizationTest();
+
+  // Populate gist fields
+  const tokenEl = document.getElementById('gist-token');
+  const gistIdEl = document.getElementById('gist-id');
+  const gistFileEl = document.getElementById('gist-file');
+  const autoEl = document.getElementById('gist-auto-sync');
+
+  if (tokenEl) tokenEl.value = settings.gist?.token || '';
+  if (gistIdEl) gistIdEl.value = settings.gist?.gistId || '';
+  if (gistFileEl)
+    gistFileEl.value = settings.gist?.fileName || 'laterlist.json';
+  if (autoEl) autoEl.checked = !!settings.gist?.autoSync;
 }
 
 async function handleSave() {
@@ -419,6 +438,21 @@ async function handleSave() {
     sendAllTabsDestination: destinationSelect.value,
     urlCleanup: getUrlCleanupFromInputs(),
     imageRules: collectImageRules(),
+  };
+
+  // Gist settings
+  const tokenEl = document.getElementById('gist-token');
+  const gistIdEl = document.getElementById('gist-id');
+  const gistFileEl = document.getElementById('gist-file');
+  const autoEl = document.getElementById('gist-auto-sync');
+
+  settings.gist = {
+    token: tokenEl ? tokenEl.value.trim() : '',
+    gistId: gistIdEl ? gistIdEl.value.trim() : '',
+    fileName: gistFileEl
+      ? gistFileEl.value.trim() || 'laterlist.json'
+      : 'laterlist.json',
+    autoSync: autoEl ? !!autoEl.checked : false,
   };
 
   try {
@@ -452,7 +486,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       // Add active class to clicked tab and corresponding content
       button.classList.add('active');
       const activeContent = document.querySelector(
-        `.settings-content-wrapper[data-tab-content="${tabName}"]`
+        `.settings-content-wrapper[data-tab-content="${tabName}"]`,
       );
       if (activeContent) {
         activeContent.classList.add('active');
@@ -472,6 +506,32 @@ document.addEventListener('DOMContentLoaded', async () => {
     saveButton.addEventListener('click', handleSave);
   }
 
+  // Gist controls
+  const gistSyncNow = document.getElementById('gist-sync-now');
+  const gistRestore = document.getElementById('gist-restore');
+  if (gistSyncNow) {
+    gistSyncNow.addEventListener('click', async () => {
+      gistSyncNow.disabled = true;
+      await chrome.runtime.sendMessage({ type: 'laterlist:gistSync' });
+      gistSyncNow.disabled = false;
+      showStatus('Sync started');
+    });
+  }
+  if (gistRestore) {
+    gistRestore.addEventListener('click', async () => {
+      gistRestore.disabled = true;
+      const res = await chrome.runtime.sendMessage({
+        type: 'laterlist:gistRestore',
+      });
+      gistRestore.disabled = false;
+      if (res && res.success) {
+        showStatus('Restore completed');
+      } else {
+        showStatus('Restore failed: ' + (res?.error || 'unknown'), true);
+      }
+    });
+  }
+
   const addRuleBtn = document.getElementById('add-image-rule');
   if (addRuleBtn) {
     addRuleBtn.addEventListener('click', () => {
@@ -479,7 +539,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (!list) return;
       const nextIdx = list.querySelectorAll('.image-rule').length;
       list.appendChild(
-        createRuleRow({ pattern: '*', allow: [], deny: [] }, nextIdx)
+        createRuleRow({ pattern: '*', allow: [], deny: [] }, nextIdx),
       );
       updateRuleIndices();
     });

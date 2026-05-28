@@ -10,6 +10,7 @@ This is a Chromium browser extension inspired by the Onetab extension. The goal 
 - Reorder tabs directly in the view via drag-and-drop
 - Status overlay auto-hides at drag start and stays suppressed during drag so it never blocks drop targets
 - Main view stays open in a single pinned tab to avoid duplicates
+- Clicking a saved link opens it in a focused foreground tab
 - Background metadata capture: the extension automatically captures page metadata (images, description, summary, published date, keywords, author, site name, canonical URL, type, locale, and embedded iframe URLs) when a tab finishes loading, so sending/closing tabs is fast for pages with cached metadata.
 
 ## Installation

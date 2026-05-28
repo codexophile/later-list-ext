@@ -1579,7 +1579,7 @@ function archiveLink(tabId, containerId, linkId) {
 }
 
 function handleOpenLink(url, tabId, containerId, linkId) {
-  chrome.tabs.create({ url, active: false });
+  chrome.tabs.create({ url, active: true });
   if (tabId && containerId && linkId) {
     const link = getLinkById(tabId, containerId, linkId);
     // Only delete if the link is not locked
@@ -2026,7 +2026,7 @@ function renderActiveTab(container) {
         });
         anchor.addEventListener('click', e => {
           e.preventDefault();
-          chrome.tabs.create({ url: link.url, active: false });
+          chrome.tabs.create({ url: link.url, active: true });
         });
 
         linkInfo.appendChild(anchor);
@@ -2726,7 +2726,7 @@ function renderDuplicates(container, duplicateGroups) {
         });
         anchor.addEventListener('click', e => {
           e.preventDefault();
-          chrome.tabs.create({ url: linkRef.url, active: false });
+          chrome.tabs.create({ url: linkRef.url, active: true });
         });
 
         linkInfo.appendChild(anchor);
@@ -3775,7 +3775,7 @@ function showContextMenuTrash(event, link) {
     label: 'Open in new tab',
     icon: '🔗',
     action: () => {
-      chrome.tabs.create({ url: link.url, active: false });
+      chrome.tabs.create({ url: link.url, active: true });
       hideContextMenu();
     },
   });

@@ -11,7 +11,7 @@ This is a Chromium browser extension inspired by the Onetab extension. The goal 
 - Status overlay auto-hides at drag start and stays suppressed during drag so it never blocks drop targets
 - Main view stays open in a single pinned tab to avoid duplicates and is restored on extension load/reload
 - Clicking a saved link opens it in a focused foreground tab
-- Background metadata capture: the extension automatically captures page metadata (images, description, summary, published date, keywords, author, site name, canonical URL, type, locale, and embedded iframe URLs) when a tab finishes loading, so sending/closing tabs is fast for pages with cached metadata.
+- Background metadata capture: the extension automatically captures page metadata (preview images, description, summary, published date, keywords, author, site name, canonical URL, type, locale, and embedded iframe URLs) when a tab finishes loading, so sending/closing tabs is fast for pages with cached metadata. Preview images prefer social and structured image tags such as `og:image`, `twitter:image`, `itemprop="image"`, and `image_src` before falling back to visible images or icons.
 
 ## Installation
 

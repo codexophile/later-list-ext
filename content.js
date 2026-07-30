@@ -95,7 +95,7 @@
   // Extract JSON-LD metadata
   function extractJsonLd() {
     const scripts = document.querySelectorAll(
-      'script[type="application/ld+json"]'
+      'script[type="application/ld+json"]',
     );
     for (const script of scripts) {
       try {
@@ -260,20 +260,35 @@
         return u.endsWith('.svg') || u.startsWith('data:image/svg');
       };
 
+      const toAbsoluteUrl = raw => {
+        if (!raw) return null;
+        try {
+          return new URL(raw, location.href).href;
+        } catch {
+          return null;
+        }
+      };
+
       const add = url => {
-        if (!url) return;
-        const trimmed = url.trim();
-        if (!trimmed || seen.has(trimmed)) return;
-        // Filter out obviously invalid URLs
-        if (
-          trimmed.startsWith('data:') ||
-          trimmed.startsWith('about:') ||
-          trimmed.startsWith('javascript:')
-        )
-          return;
-        if (isSvg(trimmed)) return;
-        seen.add(trimmed);
-        candidates.push(trimmed);
+        const abs = toAbsoluteUrl(url);
+        if (!abs || seen.has(abs) || isSvg(abs)) return;
+        seen.add(abs);
+        candidates.push(abs);
+      };
+
+      const isBlockedMeta = url => {
+        const lowered = url.trim().toLowerCase();
+        const pattern = /logo|icon|sprite|favicon|social|share/;
+        if (pattern.test(lowered)) return true;
+        try {
+          const parsed = new URL(url, location.href);
+          const path = parsed.pathname.toLowerCase();
+          if (path.includes('favicon')) return true;
+          const file = path.split('/').pop() || '';
+          return pattern.test(file);
+        } catch {
+          return false;
+        }
       };
 
       const visibleEnough = img => {
@@ -307,51 +322,63 @@
         return Boolean(img.closest(selectors.join(',')));
       };
 
-      // Visible, reasonably large images in the page (already loaded)
-      document.querySelectorAll('img').forEach(img => {
-        if (!visibleEnough(img)) return;
-        if (isInExcludedContext(img)) return;
-        const src = img.currentSrc || img.src || img.getAttribute('data-src');
-        add(src);
-      });
-
-      // Meta tags (need validation since they might not be loaded)
       const metaSelectors = [
         'meta[property="og:image"]',
+        'meta[property="og:image:url"]',
+        'meta[property="og:image:secure_url"]',
+        'meta[property="twitter:image"]',
+        'meta[property="twitter:image:src"]',
         'meta[name="twitter:image"]',
         'meta[name="twitter:image:src"]',
+        'meta[itemprop="image"]',
+        'meta[name="thumbnail"]',
+        'meta[property="thumbnail"]',
+        'meta[property="article:image"]',
+        'link[rel="image_src"]',
       ];
-      const isBlockedMeta = url => {
-        const lowered = url.trim().toLowerCase();
-        const pattern = /logo|icon|sprite|favicon|social|share/;
-        if (pattern.test(lowered)) return true;
-        try {
-          const parsed = new URL(url, location.href);
-          const path = parsed.pathname.toLowerCase();
-          if (path.includes('favicon')) return true;
-          const file = path.split('/').pop() || '';
-          return pattern.test(file);
-        } catch {
-          return false;
-        }
-      };
+
       const metaUrls = [];
-      metaSelectors.forEach(sel => {
-        const el = document.querySelector(sel);
-        if (el?.content) {
-          const val = el.content.trim();
-          if (!seen.has(val) && !isSvg(val) && !isBlockedMeta(val)) {
-            metaUrls.push(val);
-          }
+      const metaSeen = new Set();
+      const addMeta = raw => {
+        const abs = toAbsoluteUrl(raw);
+        if (!abs || metaSeen.has(abs) || isSvg(abs) || isBlockedMeta(abs)) {
+          return;
         }
+        metaSeen.add(abs);
+        metaUrls.push(abs);
+      };
+
+      // Meta tags first, with validation before promotion
+      metaSelectors.forEach(sel => {
+        document.querySelectorAll(sel).forEach(el => {
+          const raw =
+            el.getAttribute('content') ||
+            el.getAttribute('href') ||
+            el.content ||
+            el.href;
+          if (raw) addMeta(raw);
+        });
       });
 
-      // Icons
-      const icon = document.querySelector('link[rel*="icon"]');
-      if (icon?.href) {
-        const val = icon.href;
-        if (!seen.has(val) && !isSvg(val)) {
-          metaUrls.push(val);
+      const scripts = document.querySelectorAll(
+        'script[type="application/ld+json"]',
+      );
+      for (const script of scripts) {
+        try {
+          const data = JSON.parse(script.textContent);
+          const jsonLd = Array.isArray(data) ? data[0] : data;
+          const queue = Array.isArray(jsonLd?.image)
+            ? jsonLd.image
+            : [jsonLd?.image];
+          queue.forEach(value => {
+            if (typeof value === 'object' && value) {
+              addMeta(value.url || value.contentUrl || value.image);
+            } else if (value) {
+              addMeta(String(value));
+            }
+          });
+        } catch {
+          // Ignore malformed structured data.
         }
       }
 
@@ -362,10 +389,36 @@
       });
 
       const validatedMeta = (await Promise.all(validationPromises)).filter(
-        Boolean
+        Boolean,
       );
+      validatedMeta.forEach(v => add(v));
 
-      // Prepend validated meta images (higher priority)
+      // Visible, reasonably large images in the page (already loaded)
+      document.querySelectorAll('img').forEach(img => {
+        if (!visibleEnough(img)) return;
+        if (isInExcludedContext(img)) return;
+        const src = img.currentSrc || img.src || img.getAttribute('data-src');
+        add(src);
+      });
+
+      // Icons only after other preview sources are exhausted
+      if (!validatedMeta.length && !candidates.length) {
+        const iconSelectors = [
+          'link[rel="icon"]',
+          'link[rel="shortcut icon"]',
+          'link[rel="apple-touch-icon"]',
+        ];
+        for (const sel of iconSelectors) {
+          const icon = document.querySelector(sel);
+          if (!icon?.href) continue;
+          const val = toAbsoluteUrl(icon.href);
+          if (!val || seen.has(val) || isSvg(val)) continue;
+          const isValid = await testImageUrl(val);
+          if (!isValid) continue;
+          add(val);
+          break;
+        }
+      }
       return [...validatedMeta, ...candidates];
     } catch {
       return [];

@@ -72,31 +72,9 @@ async function performGistSync(force = false) {
       METADATA_CACHE_KEY,
     ]);
 
-    // Remove any secret token from settings before uploading to gist
-    let laterlistSettingsToUpload = stored.laterlistSettings || settings;
-    try {
-      laterlistSettingsToUpload = JSON.parse(
-        JSON.stringify(laterlistSettingsToUpload),
-      );
-      if (laterlistSettingsToUpload && laterlistSettingsToUpload.gist) {
-        laterlistSettingsToUpload.gist = {
-          ...laterlistSettingsToUpload.gist,
-          token: '',
-        };
-      }
-    } catch (err) {
-      // fallback: ensure no token
-      if (laterlistSettingsToUpload && laterlistSettingsToUpload.gist) {
-        laterlistSettingsToUpload.gist = {
-          ...laterlistSettingsToUpload.gist,
-          token: '',
-        };
-      }
-    }
-
     const payload = {
       readLaterData: stored.readLaterData || DEFAULT_DATA,
-      laterlistSettings: laterlistSettingsToUpload,
+      laterlistSettings: stored.laterlistSettings || settings,
       metadataCache: stored[METADATA_CACHE_KEY] || {},
       exportedAt: Date.now(),
     };
@@ -1213,6 +1191,99 @@ function decodeBasicEntities(str) {
     .replace(/&#39;/g, "'");
 }
 
+const PREVIEW_IMAGE_SELECTORS = [
+  'meta[property="og:image"]',
+  'meta[property="og:image:url"]',
+  'meta[property="og:image:secure_url"]',
+  'meta[property="twitter:image"]',
+  'meta[property="twitter:image:src"]',
+  'meta[name="twitter:image"]',
+  'meta[name="twitter:image:src"]',
+  'meta[itemprop="image"]',
+  'meta[name="thumbnail"]',
+  'meta[property="thumbnail"]',
+  'meta[property="article:image"]',
+  'link[rel="image_src"]',
+];
+
+function collectPreviewImageCandidates(doc, pageUrl) {
+  const candidates = [];
+  const seen = new Set();
+
+  const isSvg = url => {
+    const u = url.trim().toLowerCase();
+    return u.endsWith('.svg') || u.startsWith('data:image/svg');
+  };
+
+  const isBlockedMeta = url => {
+    const lowered = url.trim().toLowerCase();
+    const pattern = /logo|icon|sprite|favicon|social|share/;
+    if (pattern.test(lowered)) return true;
+    try {
+      const parsed = new URL(url, pageUrl);
+      const path = parsed.pathname.toLowerCase();
+      if (path.includes('favicon')) return true;
+      const file = path.split('/').pop() || '';
+      return pattern.test(file);
+    } catch {
+      return false;
+    }
+  };
+
+  const addCandidate = rawUrl => {
+    if (!rawUrl) return;
+    const trimmed = rawUrl.trim();
+    if (!trimmed) return;
+    if (
+      trimmed.startsWith('data:') ||
+      trimmed.startsWith('about:') ||
+      trimmed.startsWith('javascript:')
+    )
+      return;
+    const abs = absolutizeUrl(trimmed, pageUrl);
+    if (!abs || seen.has(abs) || isSvg(abs) || isBlockedMeta(abs)) return;
+    seen.add(abs);
+    candidates.push(abs);
+  };
+
+  const addJsonLdImage = value => {
+    if (!value) return;
+    if (Array.isArray(value)) {
+      value.forEach(addJsonLdImage);
+      return;
+    }
+    if (typeof value === 'object') {
+      addJsonLdImage(value.url || value.contentUrl || value.image);
+      return;
+    }
+    addCandidate(String(value));
+  };
+
+  PREVIEW_IMAGE_SELECTORS.forEach(sel => {
+    doc.querySelectorAll(sel).forEach(el => {
+      const raw =
+        el.getAttribute('content') ||
+        el.getAttribute('href') ||
+        el.content ||
+        el.href;
+      if (raw) addCandidate(raw);
+    });
+  });
+
+  const scripts = doc.querySelectorAll('script[type="application/ld+json"]');
+  for (const script of scripts) {
+    try {
+      const data = JSON.parse(script.textContent);
+      const jsonLd = Array.isArray(data) ? data[0] : data;
+      addJsonLdImage(jsonLd?.image);
+    } catch {
+      // Ignore malformed structured data.
+    }
+  }
+
+  return candidates;
+}
+
 function extractImageFromHtml(html, pageUrl) {
   const findAttr = (tag, attr) => {
     const re = new RegExp(
@@ -1260,7 +1331,8 @@ async function fetchImageForPage(url) {
     const res = await fetch(url, { redirect: 'follow', credentials: 'omit' });
     if (!res.ok) return [];
     const html = await res.text();
-    return extractImagesFromHtml(html, url);
+    const extracted = await extractFromHtml(html, url);
+    return extracted.imageUrls || [];
   } catch (err) {
     console.warn(
       '[LaterList Background] fetchImageForPage failed for',
@@ -1405,44 +1477,55 @@ async function extractFromHtml(html, url, rule = { allow: [], deny: [] }) {
       return u.endsWith('.svg') || u.startsWith('data:image/svg');
     };
 
-    const isBlockedMeta = url => {
-      const lowered = url.trim().toLowerCase();
-      const pattern = /logo|icon|sprite|favicon|social|share/;
-      if (pattern.test(lowered)) return true;
-      try {
-        const parsed = new URL(url, url);
-        const path = parsed.pathname.toLowerCase();
-        if (path.includes('favicon')) return true;
-        const file = path.split('/').pop() || '';
-        return pattern.test(file);
-      } catch {
-        return false;
-      }
-    };
-
     const seen = new Set();
     const metaUrls = [];
     const imgUrls = [];
-    const metaSelectors = [
-      'meta[property="og:image"]',
-      'meta[name="twitter:image"]',
-      'meta[name="twitter:image:src"]',
-    ];
+    const pushImageUrl = raw => {
+      if (!raw) return;
+      const trimmed = raw.trim();
+      if (!trimmed) return;
+      if (
+        trimmed.startsWith('data:') ||
+        trimmed.startsWith('about:') ||
+        trimmed.startsWith('javascript:')
+      )
+        return;
+      const abs = absolutizeUrl(trimmed, url);
+      if (!abs || seen.has(abs) || isSvg(abs) || isBlockedMeta(abs)) return;
+      seen.add(abs);
+      metaUrls.push(abs);
+    };
 
-    metaSelectors.forEach(sel => {
-      const el = doc.querySelector(sel);
-      if (el?.content) {
+    PREVIEW_IMAGE_SELECTORS.forEach(sel => {
+      doc.querySelectorAll(sel).forEach(el => {
         if (isDenied(el)) return;
-        const val = el.content.trim();
-        if (!seen.has(val) && !isSvg(val) && !isBlockedMeta(val)) {
-          const abs = absolutizeUrl(val, url);
-          if (abs) {
-            metaUrls.push(abs);
-            seen.add(val);
-          }
-        }
-      }
+        const raw =
+          el.getAttribute('content') ||
+          el.getAttribute('href') ||
+          el.content ||
+          el.href;
+        if (raw) pushImageUrl(raw);
+      });
     });
+
+    const scripts = doc.querySelectorAll('script[type="application/ld+json"]');
+    for (const script of scripts) {
+      try {
+        const data = JSON.parse(script.textContent);
+        const jsonLd = Array.isArray(data) ? data[0] : data;
+        const image = jsonLd?.image;
+        const queue = Array.isArray(image) ? image : [image];
+        queue.forEach(value => {
+          if (typeof value === 'object' && value) {
+            pushImageUrl(value.url || value.contentUrl || value.image);
+          } else if (value) {
+            pushImageUrl(String(value));
+          }
+        });
+      } catch {
+        // Ignore malformed structured data.
+      }
+    }
 
     // Visible images from HTML (best-effort without size checks)
     doc.querySelectorAll('img').forEach(img => {
@@ -1746,19 +1829,20 @@ async function extractFromTab(tabId, pageUrl, rule = { allow: [], deny: [] }) {
           }
         };
 
+        const toAbsoluteUrl = raw => {
+          if (!raw) return null;
+          try {
+            return new URL(raw, location.href).href;
+          } catch {
+            return null;
+          }
+        };
+
         const add = url => {
-          if (!url) return;
-          const trimmed = url.trim();
-          if (!trimmed || seen.has(trimmed)) return;
-          if (
-            trimmed.startsWith('data:') ||
-            trimmed.startsWith('about:') ||
-            trimmed.startsWith('javascript:')
-          )
-            return;
-          if (isSvg(trimmed)) return;
-          seen.add(trimmed);
-          candidates.push(trimmed);
+          const abs = toAbsoluteUrl(url);
+          if (!abs || seen.has(abs) || isSvg(abs) || isBlockedMeta(abs)) return;
+          seen.add(abs);
+          candidates.push(abs);
         };
 
         const visibleEnough = img => {
@@ -1798,20 +1882,61 @@ async function extractFromTab(tabId, pageUrl, rule = { allow: [], deny: [] }) {
         // Meta tags first
         const metaSelectors = [
           'meta[property="og:image"]',
+          'meta[property="og:image:url"]',
+          'meta[property="og:image:secure_url"]',
+          'meta[property="twitter:image"]',
+          'meta[property="twitter:image:src"]',
           'meta[name="twitter:image"]',
           'meta[name="twitter:image:src"]',
+          'meta[itemprop="image"]',
+          'meta[name="thumbnail"]',
+          'meta[property="thumbnail"]',
+          'meta[property="article:image"]',
+          'link[rel="image_src"]',
         ];
         const metaUrls = [];
+        const metaSeen = new Set();
+        const addPreviewImage = raw => {
+          const abs = toAbsoluteUrl(raw);
+          if (!abs || metaSeen.has(abs) || isSvg(abs) || isBlockedMeta(abs)) {
+            return;
+          }
+          metaSeen.add(abs);
+          metaUrls.push(abs);
+        };
         metaSelectors.forEach(sel => {
           document.querySelectorAll(sel).forEach(el => {
             if (isDenied(el)) return;
-            const val = el.content?.trim();
+            const val =
+              el.getAttribute('content') ||
+              el.getAttribute('href') ||
+              el.content ||
+              el.href;
             if (!val) return;
-            if (!seen.has(val) && !isSvg(val) && !isBlockedMeta(val)) {
-              metaUrls.push(val);
-            }
+            addPreviewImage(val);
           });
         });
+
+        const scripts = document.querySelectorAll(
+          'script[type="application/ld+json"]',
+        );
+        for (const script of scripts) {
+          try {
+            const data = JSON.parse(script.textContent);
+            const jsonLd = Array.isArray(data) ? data[0] : data;
+            const image = jsonLd?.image;
+            const queue = Array.isArray(image) ? image : [image];
+            queue.forEach(value => {
+              if (typeof value === 'object' && value) {
+                addPreviewImage(value.url || value.contentUrl || value.image);
+              } else if (value) {
+                addPreviewImage(String(value));
+              }
+            });
+          } catch {
+            // Ignore malformed structured data.
+          }
+        }
 
         const validationPromises = metaUrls.map(async url => {
           const isValid = await testImageUrl(url);
@@ -1820,7 +1945,10 @@ async function extractFromTab(tabId, pageUrl, rule = { allow: [], deny: [] }) {
         const validatedMeta = (await Promise.all(validationPromises)).filter(
           Boolean,
         );
-        validatedMeta.forEach(v => seen.add(v));
+        validatedMeta.forEach(v => {
+          seen.add(v);
+          candidates.push(v);
+        });
 
         // Visible images next
         document.querySelectorAll('img').forEach(img => {

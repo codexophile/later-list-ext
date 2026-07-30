@@ -2089,7 +2089,7 @@ function createContextMenus() {
 chrome.runtime.onInstalled.addListener(async () => {
   await getData();
   createContextMenus();
-  await ensureViewTab({ activate: true, pinned: true });
+  await ensureViewTab({ activate: true, reload: true, pinned: true });
   // Set a pleasant badge background for the saved indicator
   try {
     await chrome.action.setBadgeBackgroundColor({ color: '#2E7D32' });
@@ -2099,7 +2099,7 @@ chrome.runtime.onInstalled.addListener(async () => {
 
 chrome.runtime.onStartup.addListener(async () => {
   createContextMenus();
-  await ensureViewTab({ pinned: true });
+  await ensureViewTab({ activate: true, reload: true, pinned: true });
 });
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {

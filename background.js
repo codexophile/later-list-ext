@@ -416,46 +416,15 @@ async function getSettings() {
   return mergeSettings(stored.laterlistSettings || {});
 }
 
-// Capture metadata when tabs finish loading, so we have it even if tabs
-// get discarded/hibernated later
-chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
-  try {
-    if (changeInfo.status !== 'complete') return;
-    const url = tab?.url || '';
-    if (!canExtractFromUrl(url)) return;
-    if (url.includes('view.html') || url.startsWith(VIEW_URL)) return;
+// Automatic metadata extraction on page load has been disabled.
+// Metadata extraction now occurs only when a link is saved (user action)
+// or when explicitly requested from the main UI. The previous onUpdated
+// listener performed in-page scans and image validations after every
+// completed tab load which could cause high concurrent memory and CPU
+// usage on image-heavy pages or when many tabs load in parallel.
 
-    const existing = await getMetadataFromCache(url);
-    if (
-      existing?.capturedAt &&
-      Date.now() - existing.capturedAt < 10 * 60 * 1000
-    ) {
-      // Cached recently; skip re-capturing
-      return;
-    }
-
-    const settings = await getSettings();
-    const rule = getActiveImageRule(settings, url);
-
-    // Prefer live extraction; fallback to fetch-based
-    let extracted = null;
-    if (!tab.discarded) {
-      try {
-        extracted = await extractFromTab(tabId, url, rule);
-      } catch (err) {
-        extracted = await extractFromUrl(url, rule);
-      }
-    } else {
-      extracted = await extractFromUrl(url, rule);
-    }
-
-    if (extracted) {
-      await saveMetadataToCache(url, extracted);
-    }
-  } catch (err) {
-    console.warn('[LaterList] onUpdated metadata capture failed:', err);
-  }
-});
+// NOTE: If you need to re-enable automatic capture in the future, restore
+// the listener above or implement a configurable setting to toggle it.
 
 // Simple date formatter
 function formatContainerName(date, formatString) {

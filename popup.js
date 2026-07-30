@@ -19,6 +19,8 @@ let previewData = {
 // Track which images are selected for saving
 let selectedImageUrls = [];
 
+let savedCopiesState = [];
+
 function setStatus(text) {
   const el = document.getElementById('status');
   if (!el) return;
@@ -51,6 +53,145 @@ function populateSelect(selectEl, options, selectedId) {
     option.textContent = opt.label;
     if (opt.id === selectedId) option.selected = true;
     selectEl.appendChild(option);
+  });
+}
+
+function formatSavedCopyPath(copy) {
+  const parts = [copy.tabName, copy.containerName].filter(Boolean);
+  const basePath = parts.length
+    ? parts.join(' › ')
+    : 'Saved location unavailable';
+  return `${basePath} › ${copy.title || 'Untitled'}`;
+}
+
+function formatSavedCopyDate(savedAt) {
+  if (!savedAt) return '';
+  try {
+    return new Date(savedAt).toLocaleString();
+  } catch {
+    return '';
+  }
+}
+
+async function updateLinkCount() {
+  const response = await chrome.runtime.sendMessage({
+    type: 'laterlist:getData',
+  });
+
+  const data = response?.data;
+  let totalLinks = 0;
+
+  if (data?.tabs) {
+    data.tabs.forEach(tab => {
+      if (tab.containers) {
+        tab.containers.forEach(container => {
+          if (container.links) {
+            totalLinks += container.links.length;
+          }
+        });
+      }
+    });
+  }
+
+  const pill = document.getElementById('link-count');
+  if (pill) pill.textContent = totalLinks;
+}
+
+async function loadSavedCopies() {
+  const panel = document.getElementById('saved-copies-panel');
+  const listEl = document.getElementById('saved-copies-list');
+  const emptyEl = document.getElementById('saved-copies-empty');
+  const countEl = document.getElementById('saved-copies-count');
+  if (!panel || !listEl || !emptyEl || !countEl) return;
+
+  if (!currentPage.url) {
+    savedCopiesState = [];
+    panel.hidden = true;
+    listEl.replaceChildren();
+    emptyEl.hidden = true;
+    countEl.textContent = '0';
+    return;
+  }
+
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: 'laterlist:getSavedLinksForUrl',
+      payload: { url: currentPage.url },
+    });
+
+    savedCopiesState = response?.savedLinks || [];
+  } catch {
+    savedCopiesState = [];
+  }
+
+  countEl.textContent = String(savedCopiesState.length);
+  panel.hidden = savedCopiesState.length === 0;
+  listEl.replaceChildren();
+  emptyEl.hidden = savedCopiesState.length > 0;
+
+  if (!savedCopiesState.length) return;
+
+  savedCopiesState.forEach(copy => {
+    const row = document.createElement('div');
+    row.className = 'saved-copy-row';
+
+    const info = document.createElement('div');
+    info.className = 'saved-copy-info';
+
+    const title = document.createElement('div');
+    title.className = 'saved-copy-title';
+    title.textContent = copy.title || copy.url || 'Untitled';
+
+    const path = document.createElement('div');
+    path.className = 'saved-copy-path';
+    path.textContent = `Path: ${formatSavedCopyPath(copy)}`;
+
+    const meta = document.createElement('div');
+    meta.className = 'saved-copy-meta';
+    const savedLabel = formatSavedCopyDate(copy.savedAt);
+    meta.textContent = savedLabel ? `Saved: ${savedLabel}` : '';
+
+    info.appendChild(title);
+    info.appendChild(path);
+    if (meta.textContent) info.appendChild(meta);
+
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'saved-copy-remove';
+    removeBtn.type = 'button';
+    removeBtn.textContent = 'Remove';
+    removeBtn.title = 'Send this copy to Trash';
+    removeBtn.addEventListener('click', async () => {
+      removeBtn.disabled = true;
+      try {
+        const result = await chrome.runtime.sendMessage({
+          type: 'laterlist:trashSavedLink',
+          payload: {
+            tabId: copy.tabId,
+            containerId: copy.containerId,
+            linkId: copy.linkId,
+            url: currentPage.url,
+          },
+        });
+
+        if (result?.error) {
+          setStatus(result.error);
+          removeBtn.disabled = false;
+          return;
+        }
+
+        setStatus('Removed');
+        await loadSavedCopies();
+        await updateLinkCount();
+        await chrome.runtime.sendMessage({ type: 'laterlist:updateView' });
+      } catch {
+        removeBtn.disabled = false;
+        setStatus('Remove failed');
+      }
+    });
+
+    row.appendChild(info);
+    row.appendChild(removeBtn);
+    listEl.appendChild(row);
   });
 }
 
@@ -619,6 +760,7 @@ async function saveToSelection({ closeTabAfterSave }) {
 
     // Notify view.html to refresh
     await chrome.runtime.sendMessage({ type: 'laterlist:updateView' });
+    await loadSavedCopies();
 
     if (closeTabAfterSave) {
       const tabIdToClose =
@@ -713,31 +855,6 @@ async function sendTabsAround(direction) {
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
-  async function updateLinkCount() {
-    const response = await chrome.runtime.sendMessage({
-      type: 'laterlist:getData',
-    });
-
-    const data = response?.data;
-    let totalLinks = 0;
-
-    // Count all links across all tabs and containers
-    if (data?.tabs) {
-      data.tabs.forEach(tab => {
-        if (tab.containers) {
-          tab.containers.forEach(container => {
-            if (container.links) {
-              totalLinks += container.links.length;
-            }
-          });
-        }
-      });
-    }
-
-    const pill = document.getElementById('link-count');
-    if (pill) pill.textContent = totalLinks;
-  }
-
   try {
     await updateLinkCount();
   } catch {
@@ -785,6 +902,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (typeof currentPage.tabId === 'number') {
       extractPreview(currentPage.tabId);
     }
+    await loadSavedCopies();
   } catch {
     setStatus('Failed to load');
   }

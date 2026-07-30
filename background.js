@@ -360,6 +360,21 @@ async function saveData(data) {
   }
 }
 
+function moveLinkToTrashInData(data, tabId, containerId, linkId) {
+  const tab = data.tabs.find(t => t.id === tabId);
+  const container = tab?.containers.find(c => c.id === containerId);
+  if (!container) return null;
+
+  const linkIndex = container.links.findIndex(l => l.id === linkId);
+  if (linkIndex === -1) return null;
+
+  const [removed] = container.links.splice(linkIndex, 1);
+  removed.deletedAt = Date.now();
+  data.trash = data.trash || [];
+  data.trash.push(removed);
+  return removed;
+}
+
 const STORAGE_QUOTA_BYTES =
   chrome?.storage?.local?.QUOTA_BYTES || 5 * 1024 * 1024;
 
@@ -1124,6 +1139,51 @@ async function isUrlSaved(url) {
     }
   }
   return false;
+}
+
+async function getSavedLinksForUrl(url) {
+  if (!url) return [];
+
+  const settings = await getSettings();
+  const normalize = target =>
+    normalizeUrlWithSettings(target, settings.urlCleanup);
+  const target = normalize(url);
+  const data = await getData();
+  const matches = [];
+
+  for (const tab of data.tabs || []) {
+    for (const container of tab.containers || []) {
+      for (const link of container.links || []) {
+        if (normalize(link.url) !== target) continue;
+        matches.push({
+          tabId: tab.id,
+          tabName: tab.name,
+          containerId: container.id,
+          containerName: container.name,
+          linkId: link.id,
+          title: link.title,
+          url: link.url,
+          savedAt: link.savedAt,
+        });
+      }
+    }
+  }
+
+  return matches.sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
+}
+
+async function trashSavedLink(payload) {
+  const data = await getData();
+  const removed = moveLinkToTrashInData(
+    data,
+    payload?.tabId,
+    payload?.containerId,
+    payload?.linkId,
+  );
+  if (!removed) throw new Error('Saved link not found');
+
+  await saveData(data);
+  return removed;
 }
 
 async function refreshTabActionState(tabId, url) {
@@ -2115,6 +2175,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           refreshTabActionState(sender.tab.id, message.payload.url);
         }
         sendResponse({ link });
+      })
+      .catch(err => sendResponse({ error: err?.message }));
+    return true;
+  }
+  if (message?.type === 'laterlist:getSavedLinksForUrl') {
+    getSavedLinksForUrl(message.payload?.url)
+      .then(savedLinks => sendResponse({ savedLinks }))
+      .catch(err => sendResponse({ savedLinks: [], error: err?.message }));
+    return true;
+  }
+  if (message?.type === 'laterlist:trashSavedLink') {
+    trashSavedLink(message.payload || {})
+      .then(removed => {
+        if (message.payload?.tabId && message.payload?.url) {
+          refreshTabActionState(message.payload.tabId, message.payload.url);
+        }
+        sendResponse({ removed });
       })
       .catch(err => sendResponse({ error: err?.message }));
     return true;

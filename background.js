@@ -56,6 +56,52 @@ function mergeSettings(raw = {}) {
 let _gistSyncTimer = null;
 let _gistSyncInProgress = false;
 
+const SYNC_SENSITIVE_KEY_PATTERN =
+  /api[_-]?key|access[_-]?token|personal[_-]?access[_-]?token|auth(?:orization|[_-]?token)|github[_-]?token|client[_-]?secret|secret[_-]?key|(?:^|[_-])(?:pat|token|secret|bearer)(?:$|[_-])/i;
+const SYNC_SENSITIVE_URL_PARAM_PATTERN =
+  /^(?:api[_-]?key|access[_-]?token|personal[_-]?access[_-]?token|pat|token|secret|authorization|bearer)$/i;
+
+function sanitizeSyncValue(value, key = '') {
+  if (SYNC_SENSITIVE_KEY_PATTERN.test(key)) return undefined;
+
+  if (typeof value === 'string') {
+    try {
+      const url = new URL(value);
+      const sensitiveParams = [...url.searchParams.keys()].filter(param =>
+        SYNC_SENSITIVE_URL_PARAM_PATTERN.test(param),
+      );
+      sensitiveParams.forEach(param => {
+        url.searchParams.delete(param);
+      });
+      if (sensitiveParams.length > 0) {
+        return url.toString();
+      }
+      return value;
+    } catch {
+      return value;
+    }
+  }
+
+  if (Array.isArray(value)) {
+    return value
+      .map(item => sanitizeSyncValue(item))
+      .filter(item => item !== undefined);
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value)
+        .map(([entryKey, entryValue]) => [
+          entryKey,
+          sanitizeSyncValue(entryValue, entryKey),
+        ])
+        .filter(([, entryValue]) => entryValue !== undefined),
+    );
+  }
+
+  return value;
+}
+
 function scheduleGistSync(delay = 1200) {
   try {
     if (_gistSyncTimer) clearTimeout(_gistSyncTimer);
@@ -87,12 +133,12 @@ async function performGistSync(force = false) {
       METADATA_CACHE_KEY,
     ]);
 
-    const payload = {
+    const payload = sanitizeSyncValue({
       readLaterData: stored.readLaterData || DEFAULT_DATA,
       laterlistSettings: stored.laterlistSettings || settings,
       metadataCache: stored[METADATA_CACHE_KEY] || {},
       exportedAt: Date.now(),
-    };
+    });
 
     const body = {
       files: {

@@ -149,6 +149,13 @@ body.popup-body {
   gap: 8px;
 }
 
+.extraction-rule-status {
+  color: var(--accent, #4a9eff);
+  font-size: 11px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
 .saved-copies-panel {
   display: grid;
   gap: 8px;

@@ -17,13 +17,13 @@ const DEFAULT_URL_CLEANUP = {
   lowercase: true,
 };
 
-const DEFAULT_IMAGE_RULES = [];
+const DEFAULT_EXTRACTION_RULES = [];
 
 const DEFAULT_SETTINGS = {
   containerNameFormat: 'ddd, MMM DD, YYYY at HHmm Hrs',
   sendAllTabsDestination: '', // Empty means first tab
   urlCleanup: DEFAULT_URL_CLEANUP,
-  imageRules: DEFAULT_IMAGE_RULES,
+  extractionRules: DEFAULT_EXTRACTION_RULES,
   gist: {
     token: '',
     gistId: '',
@@ -35,7 +35,19 @@ const DEFAULT_SETTINGS = {
 function mergeSettings(raw = {}) {
   const merged = { ...DEFAULT_SETTINGS, ...raw };
   merged.urlCleanup = { ...DEFAULT_URL_CLEANUP, ...(raw.urlCleanup || {}) };
-  merged.imageRules = Array.isArray(raw.imageRules) ? raw.imageRules : [];
+  if (Array.isArray(raw.extractionRules)) {
+    merged.extractionRules = raw.extractionRules;
+  } else if (Array.isArray(raw.imageRules)) {
+    merged.extractionRules = raw.imageRules.map(rule => ({
+      host: rule.pattern || '',
+      selectors: [
+        ...(Array.isArray(rule.allow) ? rule.allow : []),
+        ...(Array.isArray(rule.deny) ? rule.deny : []),
+      ],
+    }));
+  } else {
+    merged.extractionRules = [];
+  }
   merged.gist = { ...DEFAULT_SETTINGS.gist, ...(raw.gist || {}) };
   return merged;
 }
@@ -170,27 +182,35 @@ function wildcardToRegex(pattern) {
   return new RegExp(regex, 'i');
 }
 
-function getActiveImageRule(settings, url) {
-  const rules = settings?.imageRules || [];
-  for (const rule of rules) {
-    if (!rule?.pattern) continue;
-    try {
-      const re = wildcardToRegex(rule.pattern.trim());
-      if (re.test(url || '')) {
-        return {
-          allow: Array.isArray(rule.allow) ? rule.allow : [],
-          deny: Array.isArray(rule.deny) ? rule.deny : [],
-        };
-      }
-    } catch (err) {
-      console.warn(
-        '[LaterList] Invalid image rule pattern:',
-        rule.pattern,
-        err,
-      );
-    }
+function getActiveExtractionRule(settings, url) {
+  const rules = settings?.extractionRules || [];
+  let hostname = '';
+  try {
+    hostname = new URL(url).hostname.toLowerCase();
+  } catch {
+    return { selectors: [] };
   }
-  return { allow: [], deny: [] };
+
+  for (const rule of rules) {
+    const host = String(rule?.host || '')
+      .trim()
+      .toLowerCase();
+    if (!host) continue;
+    const matches = host.includes('://')
+      ? wildcardToRegex(host).test(String(url || '').toLowerCase())
+      : host === '*'
+        ? true
+        : host.startsWith('*.')
+          ? hostname === host.slice(2) || hostname.endsWith(host.slice(1))
+          : hostname === host;
+    if (matches)
+      return {
+        selectors: Array.isArray(rule.selectors) ? rule.selectors : [],
+        allow: Array.isArray(rule.allow) ? rule.allow : [],
+        deny: Array.isArray(rule.deny) ? rule.deny : [],
+      };
+  }
+  return { selectors: [], allow: [], deny: [] };
 }
 
 const DEFAULT_DATA = {
@@ -485,6 +505,8 @@ function copyMetadataToLink(extracted, link) {
   if (extracted.type) link.type = extracted.type;
   if (extracted.locale) link.locale = extracted.locale;
   if (extracted.iframes) link.iframes = extracted.iframes;
+  if (extracted.ruleExtracted?.length)
+    link.ruleExtracted = extracted.ruleExtracted;
 }
 
 async function sendAllBrowserTabsToLaterList() {
@@ -574,6 +596,8 @@ async function sendAllBrowserTabsToLaterList() {
           if (cached.type) link.type = cached.type;
           if (cached.locale) link.locale = cached.locale;
           if (cached.iframes) link.iframes = cached.iframes;
+          if (cached.ruleExtracted?.length)
+            link.ruleExtracted = cached.ruleExtracted;
           link.metaStatus = 'done';
           link.metaError = '';
         } else if (!tab.discarded && isHttp) {
@@ -606,7 +630,7 @@ async function sendAllBrowserTabsToLaterList() {
       const extractPromises = Array.from(linksByTab.values()).map(
         async ({ link, tabId: liveTabId }) => {
           try {
-            const rule = getActiveImageRule(settings, link.url);
+            const rule = getActiveExtractionRule(settings, link.url);
             const extracted = await extractFromTab(liveTabId, link.url, rule);
             if (extracted.imageUrls?.length > 0) {
               link.imageUrls = extracted.imageUrls;
@@ -622,6 +646,8 @@ async function sendAllBrowserTabsToLaterList() {
             if (extracted.type) link.type = extracted.type;
             if (extracted.locale) link.locale = extracted.locale;
             if (extracted.iframes) link.iframes = extracted.iframes;
+            if (extracted.ruleExtracted?.length)
+              link.ruleExtracted = extracted.ruleExtracted;
             link.metaStatus = 'done';
             link.metaError = '';
           } catch (err) {
@@ -800,6 +826,8 @@ async function sendTabsAroundCurrentTab(direction) {
           if (cached.type) link.type = cached.type;
           if (cached.locale) link.locale = cached.locale;
           if (cached.iframes) link.iframes = cached.iframes;
+          if (cached.ruleExtracted?.length)
+            link.ruleExtracted = cached.ruleExtracted;
           link.metaStatus = 'done';
           link.metaError = '';
         } else if (!tab.discarded && isHttp) {
@@ -832,7 +860,7 @@ async function sendTabsAroundCurrentTab(direction) {
       const extractPromises = Array.from(linksByTab.values()).map(
         async ({ link, tabId: liveTabId }) => {
           try {
-            const rule = getActiveImageRule(settings, link.url);
+            const rule = getActiveExtractionRule(settings, link.url);
             const extracted = await extractFromTab(liveTabId, link.url, rule);
             if (extracted.imageUrls?.length > 0) {
               link.imageUrls = extracted.imageUrls;
@@ -848,6 +876,8 @@ async function sendTabsAroundCurrentTab(direction) {
             if (extracted.type) link.type = extracted.type;
             if (extracted.locale) link.locale = extracted.locale;
             if (extracted.iframes) link.iframes = extracted.iframes;
+            if (extracted.ruleExtracted?.length)
+              link.ruleExtracted = extracted.ruleExtracted;
             link.metaStatus = 'done';
             link.metaError = '';
           } catch (err) {
@@ -936,6 +966,7 @@ async function addLink({
   type,
   locale,
   iframes,
+  ruleExtracted,
 }) {
   console.log('[LaterList Background] addLink called with:', {
     url,
@@ -954,6 +985,7 @@ async function addLink({
     type,
     locale,
     iframes,
+    ruleExtracted,
   });
 
   const data = await getData();
@@ -998,6 +1030,7 @@ async function addLink({
     'type',
     'locale',
     'iframes',
+    'ruleExtracted',
   ];
   try {
     extra.forEach(key => {
@@ -1374,7 +1407,7 @@ async function extractMetadataForLink({ url, linkId } = {}) {
 
     // Get settings for image rules
     const settings = await getSettings();
-    const rule = getActiveImageRule(settings, url);
+    const rule = getActiveExtractionRule(settings, url);
 
     // Extract metadata using the existing function
     const metadata = await extractFromTab(tempTab.id, url, rule);
@@ -1476,7 +1509,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (tab?.id && typeof tab.id === 'number') {
     try {
       const settings = await getSettings();
-      const rule = getActiveImageRule(settings, url);
+      const rule = getActiveExtractionRule(settings, url);
       // Use fetch-based extraction for discarded tabs
       const extracted = tab.discarded
         ? await extractFromUrl(url, rule)
@@ -1517,7 +1550,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     (async () => {
       try {
         const settings = await getSettings();
-        const rule = getActiveImageRule(settings, message.url);
+        const rule = getActiveExtractionRule(settings, message.url);
         const extracted = await extractFromTab(
           message.tabId,
           message.url,

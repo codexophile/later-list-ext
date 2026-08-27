@@ -12,6 +12,27 @@ function createEmptyResult() {
     type: null,
     locale: null,
     iframes: [],
+    ruleExtracted: [],
+  };
+}
+
+function normalizeSelectorRule(selector = '') {
+  if (typeof selector === 'string') {
+    return {
+      name: selector,
+      selector,
+      extract: { text: true, attributes: [] },
+    };
+  }
+  return {
+    name: selector.name || selector.selector || '',
+    selector: selector.selector || '',
+    extract: {
+      text: selector.extract?.text !== false,
+      attributes: Array.isArray(selector.extract?.attributes)
+        ? selector.extract.attributes
+        : [],
+    },
   };
 }
 
@@ -32,6 +53,12 @@ export async function extractFromHtml(
 
     const allowSelectors = Array.isArray(rule.allow) ? rule.allow : [];
     const denySelectors = Array.isArray(rule.deny) ? rule.deny : [];
+    const customSelectors = (
+      Array.isArray(rule.selectors) ? rule.selectors : []
+    )
+      .map(normalizeSelectorRule)
+      .filter(item => item.selector);
+    const ruleExtracted = [];
 
     const matchesAny = (el, selectors) =>
       selectors.some(sel => {
@@ -113,6 +140,58 @@ export async function extractFromHtml(
       imgUrls.push(abs);
     });
 
+    customSelectors.forEach(selectorRule => {
+      try {
+        doc.querySelectorAll(selectorRule.selector).forEach(element => {
+          const attributes = {};
+          (selectorRule.extract.attributes || []).forEach(attributeName => {
+            const value = element.getAttribute(attributeName);
+            if (value !== null) attributes[attributeName] = value;
+          });
+          ruleExtracted.push({
+            name: selectorRule.name,
+            selector: selectorRule.selector,
+            tagName: element.tagName.toLowerCase(),
+            text: selectorRule.extract.text
+              ? (element.textContent || '')
+                  .trim()
+                  .replace(/\s+/g, ' ')
+                  .slice(0, 2000)
+              : '',
+            attributes,
+          });
+          const images = element.matches('img')
+            ? [element]
+            : [...element.querySelectorAll('img')];
+          images.forEach(img => {
+            const raw = img.getAttribute('src') || img.getAttribute('data-src');
+            const abs = absolutizeUrl(raw, url);
+            if (!abs || seen.has(abs) || isSvg(abs)) return;
+            seen.add(abs);
+            imgUrls.push(abs);
+          });
+          if (element.matches('meta, link')) {
+            const key = (
+              element.getAttribute('property') ||
+              element.getAttribute('name') ||
+              element.getAttribute('rel') ||
+              ''
+            ).toLowerCase();
+            if (key.includes('image') || key === 'thumbnail') {
+              const abs = absolutizeUrl(
+                element.getAttribute('content') || element.getAttribute('href'),
+                url,
+              );
+              if (abs && !seen.has(abs) && !isSvg(abs)) {
+                seen.add(abs);
+                imgUrls.push(abs);
+              }
+            }
+          }
+        });
+      } catch {}
+    });
+
     let iconUrl = null;
     const iconEl = doc.querySelector('link[rel*="icon"]');
     if (iconEl && !isDenied(iconEl)) {
@@ -128,6 +207,7 @@ export async function extractFromHtml(
 
     result.imageUrls = combined;
     result.imageUrl = combined[0] || null;
+    result.ruleExtracted = ruleExtracted;
 
     // Extract metadata
     const extractJsonLd = () => {
@@ -258,6 +338,49 @@ export async function extractFromHtml(
       result.locale = localeMeta.content.trim();
     }
 
+    const customIframes = [];
+    customSelectors.forEach(selectorRule => {
+      try {
+        doc.querySelectorAll(selectorRule.selector).forEach(element => {
+          const elements = element.matches('iframe')
+            ? [element]
+            : [...element.querySelectorAll('iframe')];
+          elements.forEach(iframe => {
+            const src = iframe.getAttribute('src');
+            const absoluteSrc = absolutizeUrl(src, url);
+            if (absoluteSrc && !customIframes.includes(absoluteSrc)) {
+              customIframes.push(absoluteSrc);
+            }
+          });
+          const text = (element.textContent || '').trim().replace(/\s+/g, ' ');
+          if (text.length > 50) result.summary = text.slice(0, 500);
+          if (element.matches('meta')) {
+            const key = (
+              element.getAttribute('property') ||
+              element.getAttribute('name') ||
+              ''
+            ).toLowerCase();
+            const value = (element.getAttribute('content') || '').trim();
+            if (key.includes('description') && value)
+              result.description = value;
+            if (key.includes('published') && value) {
+              const timestamp = new Date(value).getTime();
+              if (!isNaN(timestamp)) result.publishedAt = timestamp;
+            }
+            if (key === 'author' && value) result.author = value;
+            if (key === 'og:site_name' && value) result.siteName = value;
+            if (key === 'og:type' && value) result.type = value;
+            if (key === 'og:locale' && value) result.locale = value;
+          }
+          if (element.matches('link[rel="canonical"]')) {
+            const href = element.getAttribute('href');
+            const absolute = absolutizeUrl(href, url);
+            if (absolute) result.canonical = absolute;
+          }
+        });
+      } catch {}
+    });
+
     // Summary: combine description + first paragraph
     if (result.description) {
       result.summary = result.description;
@@ -290,9 +413,7 @@ export async function extractFromHtml(
         }
       }
     });
-    if (iframeUrls.length > 0) {
-      result.iframes = iframeUrls;
-    }
+    result.iframes = [...new Set(iframeUrls.concat(customIframes))];
   } catch (err) {
     console.warn('[LaterList] HTML extraction failed:', err);
   }
@@ -315,7 +436,7 @@ export async function extractFromUrl(url, rule = { allow: [], deny: [] }) {
 export async function extractFromTab(
   tabId,
   pageUrl,
-  rule = { allow: [], deny: [] },
+  rule = { allow: [], deny: [], selectors: [] },
 ) {
   const result = createEmptyResult();
 
@@ -330,11 +451,16 @@ export async function extractFromTab(
 
     const allowSelectors = Array.isArray(rule.allow) ? rule.allow : [];
     const denySelectors = Array.isArray(rule.deny) ? rule.deny : [];
+    const customSelectors = (
+      Array.isArray(rule.selectors) ? rule.selectors : []
+    )
+      .map(normalizeSelectorRule)
+      .filter(item => item.selector);
 
     // Extract images
     const imageResults = await chrome.scripting.executeScript({
       target: { tabId },
-      func: async (allowSelectors, denySelectors) => {
+      func: async (allowSelectors, denySelectors, customSelectors) => {
         const testImageUrl = (url, timeout = 3000) => {
           return new Promise(resolve => {
             const img = new Image();
@@ -525,6 +651,39 @@ export async function extractFromTab(
           add(src);
         });
 
+        customSelectors.forEach(selectorRule => {
+          try {
+            document
+              .querySelectorAll(selectorRule.selector)
+              .forEach(element => {
+                const images = element.matches('img')
+                  ? [element]
+                  : [...element.querySelectorAll('img')];
+                images.forEach(img =>
+                  add(
+                    img.currentSrc || img.src || img.getAttribute('data-src'),
+                  ),
+                );
+                if (element.matches('meta, link')) {
+                  const key = (
+                    element.getAttribute('property') ||
+                    element.getAttribute('name') ||
+                    element.getAttribute('rel') ||
+                    ''
+                  ).toLowerCase();
+                  if (key.includes('image') || key === 'thumbnail') {
+                    add(
+                      element.getAttribute('content') ||
+                        element.getAttribute('href'),
+                    );
+                  }
+                }
+              });
+          } catch {
+            // Ignore invalid custom selectors.
+          }
+        });
+
         // Icon fallback only if nothing else
         let iconUrl = null;
         const icon = document.querySelector('link[rel*="icon"]');
@@ -542,7 +701,7 @@ export async function extractFromTab(
         if (!combined.length && iconUrl) combined.push(iconUrl);
         return combined;
       },
-      args: [allowSelectors, denySelectors],
+      args: [allowSelectors, denySelectors, customSelectors],
       world: 'MAIN',
     });
 
@@ -553,7 +712,8 @@ export async function extractFromTab(
     // Extract metadata
     const metaResults = await chrome.scripting.executeScript({
       target: { tabId },
-      func: () => {
+      func: customSelectors => {
+        const ruleExtracted = [];
         const extractJsonLd = () => {
           const scripts = document.querySelectorAll(
             'script[type="application/ld+json"]',
@@ -729,19 +889,117 @@ export async function extractFromTab(
           return iframeUrls.length > 0 ? iframeUrls : null;
         };
 
+        const custom = {
+          publishedAt: null,
+          description: null,
+          summary: null,
+          keywords: [],
+          author: null,
+          siteName: null,
+          canonical: null,
+          type: null,
+          locale: null,
+          iframes: [],
+        };
+        const addCustomIframe = iframe => {
+          const src = iframe.getAttribute('src');
+          if (!src || !src.trim()) return;
+          try {
+            const absoluteSrc = new URL(src, document.baseURI).href;
+            if (!custom.iframes.includes(absoluteSrc)) {
+              custom.iframes.push(absoluteSrc);
+            }
+          } catch {}
+        };
+        const addCustomElement = element => {
+          if (element.matches('iframe')) addCustomIframe(element);
+          element.querySelectorAll('iframe').forEach(addCustomIframe);
+
+          if (element.matches('meta')) {
+            const key = (
+              element.getAttribute('property') ||
+              element.getAttribute('name') ||
+              ''
+            ).toLowerCase();
+            const value = (element.getAttribute('content') || '').trim();
+            if (!value) return;
+            if (key.includes('published') || key === 'date') {
+              const timestamp = new Date(value).getTime();
+              if (!isNaN(timestamp)) custom.publishedAt = timestamp;
+            } else if (key.includes('description')) custom.description = value;
+            else if (key === 'keywords' || key === 'article:tag') {
+              value
+                .split(',')
+                .map(item => item.trim())
+                .forEach(item => {
+                  if (item && !custom.keywords.includes(item))
+                    custom.keywords.push(item);
+                });
+            } else if (key === 'author') custom.author = value;
+            else if (key === 'og:site_name') custom.siteName = value;
+            else if (key === 'og:type') custom.type = value;
+            else if (key === 'og:locale') custom.locale = value;
+          }
+          if (element.matches('link[rel="canonical"]') && element.href) {
+            custom.canonical = element.href.trim();
+          }
+
+          const text = (element.innerText || element.textContent || '')
+            .trim()
+            .replace(/\s+/g, ' ');
+          if (text.length > 50) {
+            custom.summary =
+              text.length > 500 ? text.slice(0, 500) + '...' : text;
+          }
+        };
+        customSelectors.forEach(selectorRule => {
+          try {
+            document
+              .querySelectorAll(selectorRule.selector)
+              .forEach(element => {
+                ruleExtracted.push({
+                  name: selectorRule.name,
+                  selector: selectorRule.selector,
+                  tagName: element.tagName.toLowerCase(),
+                  text: selectorRule.extract.text
+                    ? (element.innerText || element.textContent || '')
+                        .trim()
+                        .replace(/\s+/g, ' ')
+                        .slice(0, 2000)
+                    : '',
+                  attributes: Object.fromEntries(
+                    (selectorRule.extract.attributes || [])
+                      .map(attributeName => [
+                        attributeName,
+                        element.getAttribute(attributeName),
+                      ])
+                      .filter(([, value]) => value !== null),
+                  ),
+                });
+                addCustomElement(element);
+              });
+          } catch {}
+        });
+
         return {
-          publishedAt: extractPublishedDate(),
-          description: extractDescription(),
-          summary: extractSummary(),
-          keywords: extractKeywords(),
-          author: extractAuthor(),
-          siteName: extractSiteName(),
-          canonical: extractCanonical(),
-          type: extractType(),
-          locale: extractLocale(),
-          iframes: extractIframes(),
+          publishedAt: custom.publishedAt || extractPublishedDate(),
+          description: custom.description || extractDescription(),
+          summary: custom.summary || extractSummary(),
+          keywords: custom.keywords.length
+            ? custom.keywords
+            : extractKeywords(),
+          author: custom.author || extractAuthor(),
+          siteName: custom.siteName || extractSiteName(),
+          canonical: custom.canonical || extractCanonical(),
+          type: custom.type || extractType(),
+          locale: custom.locale || extractLocale(),
+          iframes: [
+            ...new Set([...(extractIframes() || []), ...custom.iframes]),
+          ],
+          ruleExtracted,
         };
       },
+      args: [customSelectors],
     });
 
     const meta = metaResults?.[0]?.result || {};
@@ -755,6 +1013,9 @@ export async function extractFromTab(
     result.type = meta.type;
     result.locale = meta.locale;
     result.iframes = meta.iframes || [];
+    result.ruleExtracted = Array.isArray(meta.ruleExtracted)
+      ? meta.ruleExtracted
+      : [];
   } catch (err) {
     console.warn('[LaterList] Extraction failed:', err);
   }

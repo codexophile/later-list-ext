@@ -319,7 +319,7 @@
       <div class="settings-tabs">
         <button class="settings-tab active" data-tab="send-all-tabs">Send All Tabs</button>
         <button class="settings-tab" data-tab="url-cleanup">URL Cleanup</button>
-        <button class="settings-tab" data-tab="image-rules">Image Rules</button>
+        <button class="settings-tab" data-tab="extraction-rules">Rules</button>
         <button class="settings-tab" data-tab="sync">Sync</button>
       </div>
     </div>
@@ -419,26 +419,28 @@ icid"></textarea>
         </div>
       </div>
 
-      <!-- Image Rules Tab -->
-      <div class="settings-content-wrapper" data-tab-content="image-rules">
+      <!-- Extraction Rules Tab -->
+      <div class="settings-content-wrapper" data-tab-content="extraction-rules">
         <div class="settings-content-header">
-          <h2>Image Picking Rules</h2>
-          <p>Control which images are collected per site using URL patterns and CSS selectors</p>
+          <h2>Host Extraction Rules</h2>
+          <p>Customize saved metadata for particular URL hosts with named CSS selectors</p>
         </div>
 
         <div class="setting-group">
           <div class="setting-help">
-            Rules are checked in order; the first matching URL pattern is applied. Use * and ? wildcards.
+            Each host can have multiple named selectors. Choose textContent and/or comma-separated attributes such as
+            href or src; every matching element is shown in the link details overlay under its selector name.
           </div>
         </div>
 
-        <div id="image-rules-list" class="setting-group" style="display: flex; flex-direction: column; gap: 12px;">
+        <div id="extraction-rules-list" class="setting-group" style="display: flex; flex-direction: column; gap: 12px;">
         </div>
 
         <div class="setting-group">
-          <button type="button" id="add-image-rule" class="save-button" style="width: auto;">Add Rule</button>
+          <button type="button" id="add-extraction-rule" class="save-button" style="width: auto;">Add Rule</button>
           <div class="setting-help">
-            For meta tags denial, include selectors like <code>meta[property="og:image"]</code> in the Deny list.
+            Selectors can target metadata tags, content elements, images, or iframes. Rules with an empty selector list
+            preserve standard extraction only.
           </div>
         </div>
       </div>

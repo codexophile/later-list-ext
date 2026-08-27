@@ -14,13 +14,13 @@ const DEFAULT_URL_CLEANUP = {
   lowercase: true,
 };
 
-const DEFAULT_IMAGE_RULES = [];
+const DEFAULT_EXTRACTION_RULES = [];
 
 const DEFAULT_SETTINGS = {
   containerNameFormat: 'ddd, MMM DD, YYYY at HHmm Hrs',
   sendAllTabsDestination: '', // Empty means first tab
   urlCleanup: DEFAULT_URL_CLEANUP,
-  imageRules: DEFAULT_IMAGE_RULES,
+  extractionRules: DEFAULT_EXTRACTION_RULES,
   gist: {
     token: '',
     gistId: '',
@@ -32,7 +32,18 @@ const DEFAULT_SETTINGS = {
 function mergeSettings(raw = {}) {
   const merged = { ...DEFAULT_SETTINGS, ...raw };
   merged.urlCleanup = { ...DEFAULT_URL_CLEANUP, ...(raw.urlCleanup || {}) };
-  merged.imageRules = Array.isArray(raw.imageRules) ? raw.imageRules : [];
+  if (Array.isArray(raw.extractionRules)) {
+    merged.extractionRules = raw.extractionRules;
+  } else if (Array.isArray(raw.imageRules)) {
+    merged.extractionRules = raw.imageRules.map(rule => ({
+      host: rule.pattern || '',
+      selectors: [],
+      allow: Array.isArray(rule.allow) ? rule.allow : [],
+      deny: Array.isArray(rule.deny) ? rule.deny : [],
+    }));
+  } else {
+    merged.extractionRules = [];
+  }
   merged.gist = { ...DEFAULT_SETTINGS.gist, ...(raw.gist || {}) };
   return merged;
 }
@@ -148,29 +159,59 @@ function formatList(list) {
   return (list || []).join('\n');
 }
 
+function normalizeSelectorRule(selector = {}) {
+  if (typeof selector === 'string') {
+    return {
+      name: selector,
+      selector,
+      extract: { text: true, attributes: [] },
+    };
+  }
+  return {
+    name: selector.name || selector.selector || '',
+    selector: selector.selector || '',
+    extract: {
+      text: selector.extract?.text !== false,
+      attributes: Array.isArray(selector.extract?.attributes)
+        ? selector.extract.attributes
+        : [],
+    },
+  };
+}
+
+function createSelectorRow(selector = {}) {
+  const normalized = normalizeSelectorRule(selector);
+  const row = document.createElement('div');
+  row.className = 'extraction-selector-row';
+  row.innerHTML = `
+    <input type="text" class="setting-input selector-name" placeholder="Selector name" value="${normalized.name.replaceAll('"', '&quot;')}" />
+    <input type="text" class="setting-input selector-query" placeholder="CSS selector, e.g. article h2" value="${normalized.selector.replaceAll('"', '&quot;')}" />
+    <label class="selector-option"><input type="checkbox" class="selector-text" ${normalized.extract.text ? 'checked' : ''} /> textContent</label>
+    <input type="text" class="setting-input selector-attributes" placeholder="Attributes: href, src" value="${normalized.extract.attributes.join(', ').replaceAll('"', '&quot;')}" />
+    <button type="button" class="rule-remove selector-remove" title="Remove selector">Remove</button>
+  `;
+  row
+    .querySelector('.selector-remove')
+    .addEventListener('click', () => row.remove());
+  return row;
+}
+
 function createRuleRow(rule = {}, index = 0) {
   const wrapper = document.createElement('div');
-  wrapper.className = 'setting-group image-rule';
+  wrapper.className = 'setting-group extraction-rule';
   wrapper.dataset.index = index;
 
   wrapper.innerHTML = `
-    <label class="setting-label">URL pattern (wildcards allowed)</label>
-    <input type="text" class="setting-input rule-pattern" placeholder="https://example.com/*" value="${
-      rule.pattern || ''
+    <label class="setting-label">URL host</label>
+    <input type="text" class="setting-input rule-host" placeholder="example.com or *.example.com" value="${
+      rule.host || ''
     }" />
-    <div class="setting-help">Use * and ? wildcards. First matching rule is applied.</div>
+    <div class="setting-help">The rule applies to this host. Prefix with *. to include its subdomains.</div>
 
-    <label class="setting-label">Allow selectors (one per line)</label>
-    <textarea class="setting-input setting-textarea rule-allow" placeholder=".article img\nmain img">${formatList(
-      rule.allow || [],
-    )}</textarea>
-    <div class="setting-help">If provided, only elements matching at least one of these selectors are kept.</div>
-
-    <label class="setting-label">Deny selectors (one per line)</label>
-    <textarea class="setting-input setting-textarea rule-deny" placeholder="header img\nnav img\nmeta[property='og:image']">${formatList(
-      rule.deny || [],
-    )}</textarea>
-    <div class="setting-help">Any element matching these selectors is skipped. Deny overrides allow.</div>
+    <label class="setting-label">CSS selectors</label>
+    <div class="rule-selectors"></div>
+    <button type="button" class="rule-add-selector">Add selector</button>
+    <div class="setting-help">Each selector has a display name. Matching elements are all extracted and grouped by that name.</div>
 
     <button type="button" class="rule-remove">Remove rule</button>
   `;
@@ -181,41 +222,53 @@ function createRuleRow(rule = {}, index = 0) {
     updateRuleIndices();
   });
 
+  const selectorList = wrapper.querySelector('.rule-selectors');
+  (rule.selectors?.length ? rule.selectors : [{}]).forEach(selector => {
+    selectorList.appendChild(createSelectorRow(selector));
+  });
+  wrapper.querySelector('.rule-add-selector').addEventListener('click', () => {
+    selectorList.appendChild(createSelectorRow());
+  });
+
   return wrapper;
 }
 
 function updateRuleIndices() {
-  document.querySelectorAll('.image-rule').forEach((el, idx) => {
+  document.querySelectorAll('.extraction-rule').forEach((el, idx) => {
     el.dataset.index = idx;
   });
 }
 
-function parseSelectors(value) {
-  return value
-    .split('\n')
-    .map(v => v.trim())
-    .filter(Boolean);
-}
-
-function collectImageRules() {
+function collectExtractionRules() {
   const rules = [];
-  document.querySelectorAll('.image-rule').forEach(el => {
-    const pattern = el.querySelector('.rule-pattern')?.value.trim();
-    const allow = parseSelectors(el.querySelector('.rule-allow')?.value || '');
-    const deny = parseSelectors(el.querySelector('.rule-deny')?.value || '');
-    if (!pattern) return;
-    rules.push({ pattern, allow, deny });
+  document.querySelectorAll('.extraction-rule').forEach(el => {
+    const host = el.querySelector('.rule-host')?.value.trim().toLowerCase();
+    const selectors = [...el.querySelectorAll('.extraction-selector-row')]
+      .map(row => ({
+        name: row.querySelector('.selector-name')?.value.trim() || '',
+        selector: row.querySelector('.selector-query')?.value.trim() || '',
+        extract: {
+          text: row.querySelector('.selector-text')?.checked || false,
+          attributes: (row.querySelector('.selector-attributes')?.value || '')
+            .split(',')
+            .map(value => value.trim())
+            .filter(Boolean),
+        },
+      }))
+      .filter(selector => selector.name && selector.selector);
+    if (!host) return;
+    rules.push({ host, selectors });
   });
   return rules;
 }
 
-function populateImageRules(settings) {
-  const list = document.getElementById('image-rules-list');
+function populateExtractionRules(settings) {
+  const list = document.getElementById('extraction-rules-list');
   if (!list) return;
   list.innerHTML = '';
-  const rules = settings.imageRules || [];
+  const rules = settings.extractionRules || [];
   if (!rules.length) {
-    list.appendChild(createRuleRow({ pattern: '*', allow: [], deny: [] }, 0));
+    list.appendChild(createRuleRow({}, 0));
   } else {
     rules.forEach((rule, idx) => {
       list.appendChild(createRuleRow(rule, idx));
@@ -407,7 +460,7 @@ async function loadAndPopulateSettings() {
   }
 
   populateUrlCleanupFields(settings);
-  populateImageRules(settings);
+  populateExtractionRules(settings);
   await populateDestinationTabs(settings);
   updatePreview();
   updateNormalizationTest();
@@ -437,7 +490,7 @@ async function handleSave() {
       formatInput.value.trim() || DEFAULT_SETTINGS.containerNameFormat,
     sendAllTabsDestination: destinationSelect.value,
     urlCleanup: getUrlCleanupFromInputs(),
-    imageRules: collectImageRules(),
+    extractionRules: collectExtractionRules(),
   };
 
   // Gist settings
@@ -532,15 +585,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
-  const addRuleBtn = document.getElementById('add-image-rule');
+  const addRuleBtn = document.getElementById('add-extraction-rule');
   if (addRuleBtn) {
     addRuleBtn.addEventListener('click', () => {
-      const list = document.getElementById('image-rules-list');
+      const list = document.getElementById('extraction-rules-list');
       if (!list) return;
-      const nextIdx = list.querySelectorAll('.image-rule').length;
-      list.appendChild(
-        createRuleRow({ pattern: '*', allow: [], deny: [] }, nextIdx),
-      );
+      const nextIdx = list.querySelectorAll('.extraction-rule').length;
+      list.appendChild(createRuleRow({}, nextIdx));
       updateRuleIndices();
     });
   }

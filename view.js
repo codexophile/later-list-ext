@@ -588,6 +588,40 @@ function buildDetailContent(linkData) {
     content += `</div>`;
   }
 
+  if (Array.isArray(linkData.ruleExtracted) && linkData.ruleExtracted.length) {
+    const groupedMatches = new Map();
+    linkData.ruleExtracted.forEach(match => {
+      const name = match?.name || match?.selector || 'Unnamed selector';
+      if (!groupedMatches.has(name)) groupedMatches.set(name, []);
+      groupedMatches.get(name).push(match);
+    });
+    content += `<div class="status-overlay-section rule-extracted-section">`;
+    content += `<div class="status-overlay-label">CSS rule extraction (${linkData.ruleExtracted.length})</div>`;
+    content += `<div class="rule-extracted-list">`;
+    groupedMatches.forEach((matches, name) => {
+      content += `<div class="rule-extracted-group">`;
+      content += `<div class="rule-extracted-selector"><strong>${escapeHtml(name)}</strong> (${matches.length})</div>`;
+      matches.forEach(match => {
+        const selector = escapeHtml(match?.selector || 'Unknown selector');
+        const tagName = escapeHtml(match?.tagName || 'element');
+        const text = String(match?.text || '').trim();
+        const attributes = Object.entries(match?.attributes || {})
+          .map(([attributeName, value]) => `${attributeName}="${value}"`)
+          .join(' ');
+        content += `<div class="rule-extracted-item">`;
+        content += `<div class="rule-extracted-selector"><code>${selector}</code> <span>&lt;${tagName}&gt;</span></div>`;
+        if (text)
+          content += `<div class="status-overlay-value rule-extracted-text">${escapeHtml(text)}</div>`;
+        if (attributes)
+          content += `<div class="rule-extracted-attributes">${escapeHtml(attributes)}</div>`;
+        content += `</div>`;
+      });
+      content += `</div>`;
+    });
+    content += `</div>`;
+    content += `</div>`;
+  }
+
   return content;
 }
 

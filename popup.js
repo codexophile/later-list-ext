@@ -14,12 +14,79 @@ let previewData = {
   description: null,
   summary: null,
   keywords: null,
+  ruleExtracted: [],
 };
 
 // Track which images are selected for saving
 let selectedImageUrls = [];
 
 let savedCopiesState = [];
+let previewExtractionPromise = null;
+
+function extractionRuleMatchesHost(host, hostname) {
+  if (host === '*') return true;
+  if (host.startsWith('*.')) {
+    const baseHost = host.slice(2);
+    return hostname === baseHost || hostname.endsWith(`.${baseHost}`);
+  }
+  return hostname === host;
+}
+
+function extractionRuleMatchesUrlPattern(pattern, url) {
+  const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+  const regex = new RegExp(
+    `^${escaped.replace(/\*/g, '.*').replace(/\?/g, '.')}$`,
+    'i',
+  );
+  return regex.test(url);
+}
+
+async function updateExtractionRuleStatus() {
+  const statusEl = document.getElementById('extraction-rule-status');
+  if (!statusEl) return;
+
+  statusEl.hidden = true;
+  statusEl.textContent = '';
+  if (!currentPage.url) return;
+
+  let hostname;
+  try {
+    hostname = new URL(currentPage.url).hostname.toLowerCase();
+  } catch {
+    return;
+  }
+
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: 'laterlist:getSettings',
+    });
+    const rules = Array.isArray(response?.settings?.extractionRules)
+      ? response.settings.extractionRules
+      : [];
+    const matches = rules.filter(rule => {
+      const host = String(rule?.host || '')
+        .trim()
+        .toLowerCase();
+      if (!host) return false;
+      if (host.includes('://')) {
+        return extractionRuleMatchesUrlPattern(host, currentPage.url);
+      }
+      return extractionRuleMatchesHost(host, hostname);
+    });
+    if (!matches.length) return;
+
+    const hostNames = matches
+      .map(rule => String(rule.host).trim())
+      .filter(Boolean)
+      .join(', ');
+    statusEl.textContent = `${matches.length} extraction rule${
+      matches.length === 1 ? '' : 's'
+    } match${matches.length === 1 ? 'es' : ''}: ${hostNames}`;
+    statusEl.hidden = false;
+  } catch (err) {
+    console.warn('[LaterList Popup] Failed to load extraction rules:', err);
+  }
+}
 
 function setStatus(text) {
   const el = document.getElementById('status');
@@ -218,6 +285,7 @@ async function extractPreview(tabId) {
         siteName: result.extracted.siteName || null,
         type: result.extracted.type || null,
         locale: result.extracted.locale || null,
+        ruleExtracted: result.extracted.ruleExtracted || [],
         iframes: result.extracted.iframes || [],
         canonical: result.extracted.canonical || null,
       };
@@ -475,6 +543,8 @@ async function saveToSelection({ closeTabAfterSave }) {
 
   setBusy(true);
   try {
+    if (previewExtractionPromise) await previewExtractionPromise;
+
     // Extract metadata from the current tab (images already extracted in preview via background)
     let publishedAt = null;
     let description = null;
@@ -488,6 +558,9 @@ async function saveToSelection({ closeTabAfterSave }) {
     let iframes = Array.isArray(previewData?.iframes)
       ? previewData.iframes
       : null;
+    let ruleExtracted = Array.isArray(previewData?.ruleExtracted)
+      ? previewData.ruleExtracted
+      : [];
     if (typeof currentPage.tabId === 'number') {
       try {
         const metaResults = await chrome.scripting.executeScript({
@@ -718,6 +791,9 @@ async function saveToSelection({ closeTabAfterSave }) {
         type = meta.type || type;
         locale = meta.locale || locale;
         if (Array.isArray(meta.iframes)) iframes = meta.iframes;
+        if (Array.isArray(meta.ruleExtracted) && meta.ruleExtracted.length) {
+          ruleExtracted = meta.ruleExtracted;
+        }
         console.log('[LaterList] Extracted metadata:', meta);
       } catch (error) {
         console.log('[LaterList] Metadata extraction failed:', error);
@@ -750,6 +826,7 @@ async function saveToSelection({ closeTabAfterSave }) {
         type,
         locale,
         iframes,
+        ruleExtracted,
       },
     });
 
@@ -898,9 +975,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   try {
     await loadCurrentTab();
+    await updateExtractionRuleStatus();
     await loadDataAndPopulatePickers();
     if (typeof currentPage.tabId === 'number') {
-      extractPreview(currentPage.tabId);
+      previewExtractionPromise = extractPreview(currentPage.tabId);
     }
     await loadSavedCopies();
   } catch {

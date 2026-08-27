@@ -1,9 +1,5 @@
-export async function extractFromHtml(
-  html,
-  url,
-  rule = { allow: [], deny: [] },
-) {
-  const result = {
+function createEmptyResult() {
+  return {
     imageUrls: [],
     imageUrl: null,
     publishedAt: null,
@@ -17,6 +13,14 @@ export async function extractFromHtml(
     locale: null,
     iframes: [],
   };
+}
+
+export async function extractFromHtml(
+  html,
+  url,
+  rule = { allow: [], deny: [] },
+) {
+  const result = createEmptyResult();
 
   try {
     if (typeof DOMParser === 'undefined') {
@@ -299,12 +303,12 @@ export async function extractFromHtml(
 export async function extractFromUrl(url, rule = { allow: [], deny: [] }) {
   try {
     const res = await fetch(url, { redirect: 'follow', credentials: 'omit' });
-    if (!res.ok) return { imageUrls: [], imageUrl: null };
+    if (!res.ok) return createEmptyResult();
     const html = await res.text();
     return await extractFromHtml(html, url, rule);
   } catch (err) {
     console.warn('[LaterList] extractFromUrl failed for', url, err);
-    return { imageUrls: [], imageUrl: null };
+    return createEmptyResult();
   }
 }
 
@@ -313,20 +317,7 @@ export async function extractFromTab(
   pageUrl,
   rule = { allow: [], deny: [] },
 ) {
-  const result = {
-    imageUrls: [],
-    imageUrl: null,
-    publishedAt: null,
-    description: null,
-    summary: null,
-    keywords: null,
-    author: null,
-    siteName: null,
-    canonical: null,
-    type: null,
-    locale: null,
-    iframes: [],
-  };
+  const result = createEmptyResult();
 
   try {
     // Safety check: only extract from http/https URLs
@@ -764,8 +755,6 @@ export async function extractFromTab(
     result.type = meta.type;
     result.locale = meta.locale;
     result.iframes = meta.iframes || [];
-    result.type = meta.type;
-    result.locale = meta.locale;
   } catch (err) {
     console.warn('[LaterList] Extraction failed:', err);
   }

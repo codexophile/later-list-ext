@@ -407,6 +407,22 @@ async function saveData(data) {
   }
 }
 
+/**
+ * Creates the minimal representation retained for a trashed link.
+ *
+ * @param {Object} link Link data to reduce.
+ * @returns {Object} A link containing only its title and URL.
+ * @example
+ * const trashedLink = compactLinkForTrash(savedLink);
+ */
+function compactLinkForTrash(link) {
+  const url = typeof link?.url === 'string' ? link.url : '';
+  return {
+    title: typeof link?.title === 'string' ? link.title : url || 'Link',
+    url,
+  };
+}
+
 function moveLinkToTrashInData(data, tabId, containerId, linkId) {
   const tab = data.tabs.find(t => t.id === tabId);
   const container = tab?.containers.find(c => c.id === containerId);
@@ -416,10 +432,10 @@ function moveLinkToTrashInData(data, tabId, containerId, linkId) {
   if (linkIndex === -1) return null;
 
   const [removed] = container.links.splice(linkIndex, 1);
-  removed.deletedAt = Date.now();
   data.trash = data.trash || [];
-  data.trash.push(removed);
-  return removed;
+  const trashedLink = compactLinkForTrash(removed);
+  data.trash.push(trashedLink);
+  return trashedLink;
 }
 
 const STORAGE_QUOTA_BYTES =

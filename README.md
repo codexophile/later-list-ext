@@ -5,6 +5,8 @@ This is a Chromium browser extension inspired by the Onetab extension. The goal 
 ## Features
 
 - Save and restore tabs
+- Trash retains only each link's title and URL; other saved metadata is discarded when a link is trashed.
+- The Trash tab can restore individual links or permanently delete all trashed links after confirmation.
 - Organize tabs into groups
 - User-friendly interface
 - Reorder tabs directly in the view via drag-and-drop
@@ -25,6 +27,7 @@ This is a Chromium browser extension inspired by the Onetab extension. The goal 
 
 - Click the extension icon to save your current tabs.
 - Access saved tabs from the popup interface. The main LaterList view lives in a pinned tab and is restored automatically when the extension loads or reloads; actions reuse that tab instead of opening new ones. When the current tab URL is already saved, the popup shows each matching copy with its tab and container path and lets you remove copies one by one.
+- In the Trash tab, click **Delete all permanently** to remove every trashed link after confirming. This action cannot be undone.
 - When you save tabs, live pages are extracted before the saved links are finalized. Discarded/hibernated tabs are not post-processed in the background after sending. Unsupported schemes (non-http/https) are skipped. Configure host rules under Settings > Rules; add a name, CSS selector, and extraction options for each selector. Invalid CSS selectors are ignored.
 - If the storage quota is exceeded, the extension automatically trims heavy metadata fields (like iframe lists, extra images, summaries, and keywords). All links are preserved.
 

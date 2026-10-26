@@ -809,6 +809,22 @@ function allocateUniqueId(existing, prefix, used) {
   return next;
 }
 
+/**
+ * Creates the minimal representation retained for a trashed link.
+ *
+ * @param {Object} link Link data to reduce.
+ * @returns {Object} A link containing only its title and URL.
+ * @example
+ * const trashedLink = compactLinkForTrash(savedLink);
+ */
+function compactLinkForTrash(link) {
+  const url = typeof link?.url === 'string' ? link.url : '';
+  return {
+    title: ensureString(link?.title, url || 'Link'),
+    url,
+  };
+}
+
 // Repairs imported/legacy data by ensuring all ids exist and are unique.
 // Returns true if any changes were made.
 function migrateAndFixData(data) {
@@ -935,37 +951,17 @@ function migrateAndFixData(data) {
     });
   });
 
-  // Trash links
-  data.trash.sort((a, b) => b.savedAt - a.savedAt);
+  // Trash links retain only their title and URL.
   data.trash.forEach((link, linkIndex) => {
-    if (!link || typeof link !== 'object') {
-      data.trash[linkIndex] = { id: id('link'), title: 'Link', url: '' };
-      changed = true;
-      link = data.trash[linkIndex];
-    }
-
-    const nextLinkId = allocateUniqueId(link.id, 'link', usedLinkIds);
-    if (link.id !== nextLinkId) {
-      link.id = nextLinkId;
-      changed = true;
-    }
-    const nextTitle = ensureString(link.title, link.url || 'Link');
-    if (link.title !== nextTitle) {
-      link.title = nextTitle;
-      changed = true;
-    }
-    const nextUrl = ensureString(link.url, '');
-    if (link.url !== nextUrl) {
-      link.url = nextUrl;
-      changed = true;
-    }
-
-    const nextSavedAt =
-      typeof link.savedAt === 'number' && Number.isFinite(link.savedAt)
-        ? link.savedAt
-        : Date.now();
-    if (link.savedAt !== nextSavedAt) {
-      link.savedAt = nextSavedAt;
+    const compactedLink = compactLinkForTrash(link);
+    if (
+      !link ||
+      typeof link !== 'object' ||
+      link.title !== compactedLink.title ||
+      link.url !== compactedLink.url ||
+      Object.keys(link).length !== 2
+    ) {
+      data.trash[linkIndex] = compactedLink;
       changed = true;
     }
   });
@@ -1147,8 +1143,7 @@ function deleteTab(tabId) {
   if (!tab) return;
   if (!confirm('Delete tab and send its links to trash?')) return;
   tab.containers.forEach(c => {
-    c.links.forEach(link => (link.deletedAt = Date.now()));
-    state.data.trash.push(...c.links);
+    state.data.trash.push(...c.links.map(compactLinkForTrash));
   });
   state.data.tabs = state.data.tabs.filter(t => t.id !== tabId);
   state.activeTabId = state.data.tabs[0]?.id || 'trash';
@@ -1172,8 +1167,7 @@ function deleteContainer(tabId, containerId) {
   const container = tab.containers.find(c => c.id === containerId);
   if (!container) return;
   if (!confirm('Delete container and send its links to trash?')) return;
-  container.links.forEach(link => (link.deletedAt = Date.now()));
-  state.data.trash.push(...container.links);
+  state.data.trash.push(...container.links.map(compactLinkForTrash));
   tab.containers = tab.containers.filter(c => c.id !== containerId);
   persist();
   render();
@@ -1645,9 +1639,8 @@ function deleteLink(tabId, containerId, linkId) {
   const linkIndex = container.links.findIndex(l => l.id === linkId);
   if (linkIndex === -1) return;
   const [removed] = container.links.splice(linkIndex, 1);
-  removed.deletedAt = Date.now();
   state.data.trash = state.data.trash || [];
-  state.data.trash.push(removed);
+  state.data.trash.push(compactLinkForTrash(removed));
   persist();
   render();
 }
@@ -1659,15 +1652,15 @@ function moveLinkToTrash(tabId, containerId, linkId) {
   const linkIndex = container.links.findIndex(l => l.id === linkId);
   if (linkIndex === -1) return null;
   const [removed] = container.links.splice(linkIndex, 1);
-  removed.deletedAt = Date.now();
   state.data.trash = state.data.trash || [];
-  state.data.trash.push(removed);
-  return removed;
+  const trashedLink = compactLinkForTrash(removed);
+  state.data.trash.push(trashedLink);
+  return trashedLink;
 }
 
-function restoreLink(linkId) {
-  const idx = state.data.trash.findIndex(l => l.id === linkId);
-  if (idx === -1) return;
+function restoreLink(trashIndex) {
+  if (trashIndex < 0 || trashIndex >= state.data.trash.length) return;
+  const idx = trashIndex;
   const [link] = state.data.trash.splice(idx, 1);
   const firstTab = state.data.tabs[0];
   if (!firstTab.containers.length) {
@@ -1678,6 +1671,31 @@ function restoreLink(linkId) {
     });
   }
   firstTab.containers[0].links.push(link);
+  persist();
+  render();
+}
+
+/**
+ * Permanently removes every link currently in the trash.
+ *
+ * @returns {void}
+ * @example
+ * emptyTrash();
+ */
+function emptyTrash() {
+  const trashCount = state.data.trash?.length ?? 0;
+  if (!trashCount) return;
+  if (
+    !confirm(
+      `Permanently delete all ${trashCount} trashed ${
+        trashCount === 1 ? 'link' : 'links'
+      }? This cannot be undone.`,
+    )
+  ) {
+    return;
+  }
+
+  state.data.trash = [];
   persist();
   render();
 }
@@ -1963,7 +1981,7 @@ function createContainerElement(containerData, tab) {
       )
         return;
       state.data.trash = state.data.trash || [];
-      state.data.trash.push(...containerData.links);
+      state.data.trash.push(...containerData.links.map(compactLinkForTrash));
       containerData.links = [];
       persist();
       render();
@@ -2034,11 +2052,25 @@ function renderActiveTab(container) {
     if (!state.data.trash?.length) {
       trashContainer.textContent = 'Trash is empty';
     } else {
-      // Sort trash links by deletedAt in descending order (most recent first)
-      const sortedTrash = [...state.data.trash].sort(
-        (a, b) => (b.deletedAt || 0) - (a.deletedAt || 0),
+      const emptyTrashBtn = createEl('button', {
+        className: 'btn empty-trash-btn',
+        textContent: 'Delete all permanently',
+        onClick: emptyTrash,
+        attrs: {
+          type: 'button',
+          'aria-label': 'Permanently delete all links in Trash',
+        },
+      });
+      attachTooltip(
+        emptyTrashBtn,
+        'Delete all permanently',
+        'Permanently remove every link in Trash. This cannot be undone.',
       );
-      sortedTrash.forEach(link => {
+      trashContainer.appendChild(emptyTrashBtn);
+
+      // Newer entries are appended last, so display them first.
+      [...state.data.trash].reverse().forEach((link, reverseIndex) => {
+        const trashIndex = state.data.trash.length - 1 - reverseIndex;
         const linkRow = createEl('div', { className: 'trash-link' });
         const favicon = createEl('img', {
           className: 'link-favicon',
@@ -2064,59 +2096,17 @@ function renderActiveTab(container) {
         });
 
         linkInfo.appendChild(anchor);
-        const imgCountTrash = Array.isArray(link.imageUrls)
-          ? link.imageUrls.length
-          : link.imageUrl
-            ? 1
-            : 0;
-        if (imgCountTrash > 0) {
-          const imageBadge = createEl('span', {
-            className: 'link-badge image-badge',
-            textContent: imgCountTrash > 1 ? String(imgCountTrash) : 'IMG',
-          });
-          imageBadge.addEventListener('click', e => {
-            e.stopPropagation();
-            e.preventDefault();
-            showImageViewer(link);
-          });
-          linkInfo.appendChild(imageBadge);
-        }
-
-        // Add hover events for status overlay
-        linkRow.addEventListener('mouseenter', () => {
-          showStatusOverlay({
-            title: link.title,
-            url: link.url,
-            savedAt: link.savedAt,
-            deletedAt: link.deletedAt,
-            imageUrl: link.imageUrl,
-            imageUrls: link.imageUrls,
-            author: link.author,
-            siteName: link.siteName,
-            canonical: link.canonical,
-            type: link.type,
-            locale: link.locale,
-            description: link.description,
-            summary: link.summary,
-            keywords: link.keywords,
-            iframes: link.iframes,
-          });
-        });
-        linkRow.addEventListener('mouseleave', () => {
-          hideStatusOverlay();
-        });
-
         const actions = createEl('div', { className: 'trash-actions' });
         const restoreBtn = createEl('button', {
           className: 'btn btn-restore',
           html: '↩️',
-          onClick: () => restoreLink(link.id),
+          onClick: () => restoreLink(trashIndex),
         });
         const deleteBtn = createEl('button', {
           className: 'btn btn-delete',
           html: '🗑️',
           onClick: () => {
-            state.data.trash = state.data.trash.filter(l => l.id !== link.id);
+            state.data.trash.splice(trashIndex, 1);
             persist();
             render();
           },
@@ -2135,7 +2125,7 @@ function renderActiveTab(container) {
 
         // Add context menu on right-click for trash links
         linkRow.addEventListener('contextmenu', e => {
-          showContextMenuTrash(e, link);
+          showContextMenuTrash(e, link, trashIndex);
         });
 
         trashContainer.appendChild(linkRow);
@@ -2267,7 +2257,9 @@ function processJSONImport(jsonText) {
     } else {
       state.data.tabs.push(...imported.tabs);
       state.data.trash = state.data.trash || [];
-      if (imported.trash) state.data.trash.push(...imported.trash);
+      if (imported.trash) {
+        state.data.trash.push(...imported.trash.map(compactLinkForTrash));
+      }
     }
 
     // Imported backups (especially from older userscripts) may be missing ids
@@ -3785,7 +3777,7 @@ function hideContextMenu() {
   currentContextLinkData = null;
 }
 
-function showContextMenuTrash(event, link) {
+function showContextMenuTrash(event, link, trashIndex) {
   event.preventDefault();
   event.stopPropagation();
 
@@ -3816,79 +3808,6 @@ function showContextMenuTrash(event, link) {
 
   items.push(null); // Divider
 
-  // View details
-  items.push({
-    label: 'View details',
-    icon: '🖼️',
-    action: () => {
-      showDetailOverlay(link);
-      hideContextMenu();
-    },
-  });
-
-  // View images
-  const imgCount = Array.isArray(link.imageUrls)
-    ? link.imageUrls.length
-    : link.imageUrl
-      ? 1
-      : 0;
-  if (imgCount > 0) {
-    items.push({
-      label: `View images (${imgCount})`,
-      icon: '📸',
-      action: () => {
-        showImageViewer(link);
-        hideContextMenu();
-      },
-    });
-  }
-
-  items.push(null); // Divider
-
-  // Extract metadata & images
-  items.push({
-    label: 'Extract metadata & images',
-    icon: '🔄',
-    action: async () => {
-      hideContextMenu();
-      try {
-        // Find the actual link in trash
-        const actualLink = state.data.trash.find(l => l.id === link.id);
-        if (!actualLink) {
-          console.error('Trash link not found');
-          return;
-        }
-
-        // Mark link as processing
-        actualLink.metaStatus = 'processing';
-        render();
-
-        const response = await chrome.runtime.sendMessage({
-          type: 'laterlist:extractMetadata',
-          payload: { url: actualLink.url, linkId: actualLink.id },
-        });
-
-        if (response?.success && response.metadata) {
-          // Update link with extracted metadata
-          Object.assign(actualLink, response.metadata);
-          actualLink.metaStatus = 'done';
-          console.log('Metadata extracted:', response.metadata);
-        } else {
-          actualLink.metaStatus = 'failed';
-          console.error('Metadata extraction failed:', response?.error);
-        }
-
-        await persist();
-        render();
-      } catch (err) {
-        const actualLink = state.data.trash.find(l => l.id === link.id);
-        if (actualLink) actualLink.metaStatus = 'failed';
-        console.error('Failed to extract metadata:', err);
-        render();
-      }
-    },
-  });
-
   items.push(null); // Divider
 
   // Restore
@@ -3896,7 +3815,7 @@ function showContextMenuTrash(event, link) {
     label: 'Restore',
     icon: '↩️',
     action: () => {
-      restoreLink(link.id);
+      restoreLink(trashIndex);
       hideContextMenu();
     },
   });
@@ -3907,7 +3826,7 @@ function showContextMenuTrash(event, link) {
     icon: '🗑️',
     action: () => {
       if (confirm('Permanently delete this link? This cannot be undone.')) {
-        state.data.trash = state.data.trash.filter(l => l.id !== link.id);
+        state.data.trash.splice(trashIndex, 1);
         persist();
         render();
       }
